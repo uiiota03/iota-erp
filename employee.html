@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Employee Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+  <script type="module" src="./js/employee.js" defer></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-6">
+  <div class="max-w-4xl mx-auto bg-white shadow rounded p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="text-2xl font-bold">Employee Dashboard</h1>
+      <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+    </div>
+
+    <div class="mb-4">
+      <p><strong>Name:</strong> <span id="employeeName"></span></p>
+      <p><strong>Position:</strong> <span id="employeeRole"></span></p>
+      <p><strong>Start Date:</strong> <span id="employeeStartDate"></span></p>
+    </div>
+
+    <div class="mb-4 flex flex-wrap items-center justify-between">
+      <button id="checkInBtn" class="px-4 py-2 border rounded mb-4">Loading...</button>
+      <div class="flex items-center gap-2">
+        <label for="monthSelect">Month:</label>
+        <select id="monthSelect" class="border px-2 py-1 rounded"></select>
+      </div>
+    </div>
+
+    <h2 class="text-xl font-semibold mb-2">Attendance for: <span id="currentMonthLabel"></span></h2>
+    <div id="calendar" class="grid grid-cols-7 gap-2 bg-gray-50 p-2 rounded"></div>
+  </div>
+</body>
+</html>

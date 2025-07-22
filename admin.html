@@ -1,0 +1,85 @@
+<!-- admin.html -->
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard - ERP</title>
+  <script type="module" src="./js/admin.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+  <div class="max-w-6xl mx-auto p-6">
+    <h1 class="text-3xl font-bold text-center mb-6">Admin Dashboard</h1>
+
+    <!-- Add Employee Form -->
+    <div class="bg-white p-4 rounded shadow mb-6">
+      <h2 class="text-xl font-semibold mb-4">Yangi Hodim Qo‘shish</h2>
+      <form id="addEmployeeForm" class="grid grid-cols-2 gap-4">
+        <input type="text" placeholder="Ismi" name="firstName" required class="border p-2 rounded" />
+        <input type="text" placeholder="Familiyasi" name="lastName" required class="border p-2 rounded" />
+        <input type="text" placeholder="Lavozimi" name="position" required class="border p-2 rounded" />
+        <input type="email" placeholder="Email (Login)" name="email" required class="border p-2 rounded" />
+        <input type="password" placeholder="Parol" name="password" required class="border p-2 rounded" />
+        <input type="date" placeholder="Ishga kirgan sana" name="startDate" required class="border p-2 rounded" />
+        <button type="submit" class="col-span-2 bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Hodimni
+          qo‘shish</button>
+      </form>
+      <p id="addStatus" class="text-green-600 mt-2"></p>
+    </div>
+
+    <!-- Tabel bo‘limi -->
+    <div class="bg-white p-4 rounded shadow mt-6">
+      <h2 class="text-xl font-semibold mb-4">🗓 Tabel</h2>
+
+      <!-- Oy tanlash -->
+      <div class="mb-4">
+        <label for="month-select" class="font-medium">Oy tanlang:</label>
+        <select id="month-select" class="border p-2 rounded ml-2">
+          <!-- Oylar dinamik yuklanadi -->
+        </select>
+      </div>
+
+      <!-- Jadval -->
+      <div class="overflow-auto">
+        <table id="tabel-table" class="w-full border text-sm">
+          <thead>
+            <tr id="tabel-header">
+              <th class="border px-2 py-1">T/r</th>
+              <th class="border px-2 py-1">Ism</th>
+              <th class="border px-2 py-1">Familiya</th>
+              <th class="border px-2 py-1 text-green-600">Kelgan</th>
+              <th class="border px-2 py-1 text-red-600">Kelmagan</th>
+              <!-- Sanalar dinamik qo‘shiladi -->
+            </tr>
+          </thead>
+          <tbody id="tabel-body">
+            <!-- Hodimlar va belgilar -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Employees List -->
+    <div class="bg-white p-4 rounded shadow">
+      <h2 class="text-xl font-semibold mb-4">Hodimlar Ro'yxati</h2>
+      <table class="w-full table-auto text-left border">
+        <thead>
+          <tr class="bg-gray-200">
+            <th class="px-4 py-2">T/r</th>
+            <th class="px-4 py-2">Ismi</th>
+            <th class="px-4 py-2">Familiyasi</th>
+            <th class="px-4 py-2">Email</th>
+            <th class="px-4 py-2">Lavozim</th>
+            <th class="px-4 py-2">Ishga kirgan sana</th>
+          </tr>
+        </thead>
+        <tbody id="employeeTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</body>
+
+</html>
