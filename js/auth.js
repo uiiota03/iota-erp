@@ -1,16 +1,19 @@
-// js/auth.js
 import {
   signInWithEmailAndPassword,
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+
 import {
   getDoc,
   doc
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
 import { auth, db } from "./firebase-config.js";
 
-// Login formini eshitamiz
 const form = document.getElementById("loginForm");
 const errorMsg = document.getElementById("errorMsg");
+
+// 🔒 Birinchi login bo'lgan employee UID
+const lockedEmployeeUID = localStorage.getItem("lockedEmployee");
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -20,25 +23,38 @@ form.addEventListener("submit", async (e) => {
   errorMsg.textContent = "";
 
   try {
-    // Firebase Auth orqali kirish
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Firestore'dan foydalanuvchi ma'lumotlarini olish
     const userRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userRef);
 
     if (!userSnap.exists()) {
-      errorMsg.textContent = "Foydalanuvchi ma'lumotlari topilmadi.";
+      errorMsg.textContent = "Foydalanuvchi topilmadi.";
       return;
     }
 
     const userData = userSnap.data();
 
-    // Ma'lumotlarni localStorage'ga saqlash
+    // 🔒 Agar employee bo‘lsa va locked UID boshqa foydalanuvchiga tegishli bo‘lsa — ruxsat berilmaydi
+    if (
+      userData.role === "employee" &&
+      lockedEmployeeUID &&
+      lockedEmployeeUID !== user.uid
+    ) {
+      errorMsg.textContent = "Bu qurilmada boshqa hodim bilan kira olmaysiz.";
+      return;
+    }
+
+    // 🔒 Agar employee va birinchi marta login qilsa — UID ni saqlaymiz
+    if (userData.role === "employee" && !lockedEmployeeUID) {
+      localStorage.setItem("lockedEmployee", user.uid);
+    }
+
+    // 👤 Foydalanuvchini localStorage'ga saqlaymiz
     localStorage.setItem("userData", JSON.stringify(userData));
 
-    // Rolga qarab sahifaga yo'naltirish
+    // 🔁 Roli bo‘yicha yo‘naltiramiz
     switch (userData.role) {
       case "admin":
         window.location.href = "/admin.html";
@@ -52,7 +68,7 @@ form.addEventListener("submit", async (e) => {
     }
 
   } catch (error) {
-    console.error("Kirishda xatolik:", error);
-    errorMsg.textContent = "Email yoki parol noto‘g‘ri!";
+    console.error("Login xatosi:", error);
+    errorMsg.textContent = "Email yoki parol noto‘g‘ri.";
   }
 });
