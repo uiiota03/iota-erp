@@ -7,32 +7,139 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
   <script type="module" src="./js/employee.js" defer></script>
+  <script type="module" src="./js/vacation.js" defer></script>
 </head>
 
-<body class="bg-gray-100 min-h-screen p-6">
-  <div class="max-w-4xl mx-auto bg-white shadow rounded p-6">
-    <div class="flex items-center justify-between mb-4">
-      <h1 class="text-2xl font-bold">Employee Dashboard</h1>
-      <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+<body class="bg-gray-100 min-h-screen">
+  <div class="flex">
+    <!-- Sidebar -->
+    <div class="w-64 bg-white shadow-lg h-screen hidden md:block">
+      <div class="p-6 border-b">
+        <h2 class="text-lg font-bold">Menu</h2>
+      </div>
+      <nav class="p-4 space-y-2">
+        <button id="navAttendance" class="w-full text-left px-4 py-2 rounded hover:bg-gray-100">Attendance</button>
+        <button id="navVacation" class="w-full text-left px-4 py-2 rounded hover:bg-gray-100">Vacation</button>
+      </nav>
     </div>
 
-    <div class="mb-4">
-      <p><strong>Name:</strong> <span id="employeeName"></span></p>
-      <p><strong>Position:</strong> <span id="employeeRole"></span></p>
-      <p><strong>Start Date:</strong> <span id="employeeStartDate"></span></p>
-    </div>
+    <!-- Main Content -->
+    <div class="flex-1 p-6">
+      <div class="max-w-4xl mx-auto bg-white shadow rounded p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h1 class="text-2xl font-bold">Employee Dashboard</h1>
+          <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+        </div>
 
-    <div class="mb-4 flex flex-wrap items-center justify-between">
-      <button id="checkInBtn" class="px-4 py-2 border rounded mb-4">Loading...</button>
-      <div class="flex items-center gap-2">
-        <label for="monthSelect">Month:</label>
-        <select id="monthSelect" class="border px-2 py-1 rounded"></select>
+        <div class="mb-4">
+          <p><strong>Name:</strong> <span id="employeeName"></span></p>
+          <p><strong>Position:</strong> <span id="employeeRole"></span></p>
+          <p><strong>Start Date:</strong> <span id="employeeStartDate"></span></p>
+        </div>
+
+        <!-- Attendance Section -->
+        <div id="attendanceSection">
+          <div class="mb-4 flex flex-wrap items-center justify-between">
+            <button id="checkInBtn" class="px-4 py-2 border rounded mb-4">Loading...</button>
+            <div class="flex items-center gap-2">
+              <label for="monthSelect">Month:</label>
+              <select id="monthSelect" class="border px-2 py-1 rounded"></select>
+            </div>
+          </div>
+
+          <h2 class="text-xl font-semibold mb-2">Attendance for: <span id="currentMonthLabel"></span></h2>
+          <div id="calendar" class="grid grid-cols-7 gap-2 bg-gray-50 p-2 rounded"></div>
+        </div>
+
+        <!-- Vacation Section (Initially hidden) -->
+        <!-- Vacation Section (Optimized UI) -->
+        <div id="vacationSection" class="hidden">
+          <h2 class="text-xl font-bold mb-4">Vacation Application</h2>
+
+          <form id="vacationForm" class="bg-gray-50 p-4 rounded shadow space-y-4">
+            <p class="text-gray-700">
+              I, <input type="text" id="fullName" class="border-b border-gray-400 w-48 px-1" required />, working as a
+              <input type="text" id="position" class="border-b border-gray-400 w-48 px-1" required />,
+              hereby request a vacation leave for the purpose of
+              <input type="text" id="purpose" class="border-b border-gray-400 w-64 px-1" required />.
+              I would like to take my leave from
+              <input type="date" id="startDate" class="border-b border-gray-400 px-1" required />
+              to
+              <input type="date" id="endDate" class="border-b border-gray-400 px-1" required />.
+            </p>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Submit
+              Request</button>
+            <p id="vacationMessage" class="text-sm text-green-600 mt-2"></p>
+          </form>
+
+          <!-- Submitted Requests Table -->
+          <h3 class="text-lg font-semibold mt-8 mb-2">Submitted Requests</h3>
+          <table class="w-full text-left text-sm table-auto bg-white shadow rounded overflow-hidden">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="p-2 border">Date Sent</th>
+                <th class="p-2 border">Purpose</th>
+                <th class="p-2 border">From - To</th>
+                <th class="p-2 border">Status</th>
+                <th class="p-2 border">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="vacationTableBody">
+              <!-- Rows will be inserted by JS -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
-
-    <h2 class="text-xl font-semibold mb-2">Attendance for: <span id="currentMonthLabel"></span></h2>
-    <div id="calendar" class="grid grid-cols-7 gap-2 bg-gray-50 p-2 rounded"></div>
   </div>
+
+  <!-- Modal for Viewing Application -->
+  <div id="viewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white w-full max-w-xl p-6 rounded shadow-lg relative">
+      <button onclick="closeModal()"
+        class="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-xl">&times;</button>
+      <h2 class="text-lg font-semibold mb-4">Vacation Request Details</h2>
+      <p id="modalContent" class="text-gray-700 whitespace-pre-line"></p>
+    </div>
+  </div>
+
+  <!-- Mobile Toggle Navbar (Optional) -->
+  <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white shadow flex justify-around py-2">
+    <button id="navAttendanceMobile" class="text-blue-600">Attendance</button>
+    <button id="navVacationMobile" class="text-gray-600">Vacation</button>
+  </div>
+
+  <script>
+    // Sidebar tugmalar
+    document.getElementById("navAttendance")?.addEventListener("click", () => {
+      document.getElementById("attendanceSection").classList.remove("hidden");
+      document.getElementById("vacationSection").classList.add("hidden");
+    });
+
+    document.getElementById("navVacation")?.addEventListener("click", () => {
+      document.getElementById("attendanceSection").classList.add("hidden");
+      document.getElementById("vacationSection").classList.remove("hidden");
+    });
+
+    // Mobile toggle tugmalar
+    document.getElementById("navAttendanceMobile")?.addEventListener("click", () => {
+      document.getElementById("attendanceSection").classList.remove("hidden");
+      document.getElementById("vacationSection").classList.add("hidden");
+    });
+
+    document.getElementById("navVacationMobile")?.addEventListener("click", () => {
+      document.getElementById("attendanceSection").classList.add("hidden");
+      document.getElementById("vacationSection").classList.remove("hidden");
+    });
+
+    // Optional: Sidebar toggle funksiyasi agar kerak bo‘lsa
+    function toggleSidebar() {
+      const sidebar = document.getElementById("sidebar");
+      sidebar.classList.toggle("w-64");
+      sidebar.classList.toggle("w-0");
+    }
+  </script>
+
 </body>
 
 </html>

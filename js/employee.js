@@ -26,8 +26,13 @@ const currentMonthLabel = document.getElementById("currentMonthLabel");
 
 // Utility
 function getTodayString() {
-    return new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
+
 
 function getMonthString(date) {
     return date.toISOString().slice(0, 7);
@@ -53,6 +58,15 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 // Check-In handler
 async function checkIn(uid) {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+
+    if (hour > 8 || (hour === 8 && minute > 10)) {
+        alert("⛔️ Check-in faqat 08:10 AM gacha mumkin.");
+        return;
+    }
+
     return new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
@@ -64,21 +78,25 @@ async function checkIn(uid) {
             );
 
             if (distance > MAX_DISTANCE_KM) {
-                alert("You are not in the office area. Attendance not recorded.");
+                alert("Siz ofis hududida emassiz. Check-in amalga oshmadi.");
                 return reject("Out of range");
             }
 
+            const now = new Date();
+            const timeStr = now.toTimeString().slice(0, 5); // "08:03"
             const today = getTodayString();
             const monthStr = today.slice(0, 7);
+
             const docRef = doc(db, "attendance", monthStr);
             const snap = await getDoc(docRef);
             let data = snap.exists() ? snap.data() : {};
 
             if (!data[uid]) data[uid] = {};
-            data[uid][today] = "+";
+            data[uid][today] = `+@${timeStr}`; // ✅ saqlanadi: +@08:03
 
             await setDoc(docRef, data);
             loadAttendance(uid, monthStr);
+            updateCheckInState(uid);
             resolve();
         }, (err) => {
             alert("Geolocation permission denied.");
@@ -88,62 +106,57 @@ async function checkIn(uid) {
 }
 
 async function loadAttendance(uid, monthStr) {
-    const [year, month] = monthStr.split("-").map(Number);
-    const docRef = doc(db, "attendance", monthStr); // ✅ To'g'ri reference
-    const snap = await getDoc(docRef);
-    const data = snap.exists() ? snap.data() : {};
-    const userAttendance = data[uid] || {};
+  const [year, month] = monthStr.split("-").map(Number);
+  const docRef = doc(db, "attendance", monthStr);
+  const snap = await getDoc(docRef);
+  const data = snap.exists() ? snap.data() : {};
+  const userAttendance = data[uid] || {};
 
-    calendar.innerHTML = "";
+  calendar.innerHTML = "";
 
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const firstDay = new Date(year, month - 1, 1);
-    const offset = firstDay.getDay();
-    const todayStr = getTodayString();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDay = new Date(year, month - 1, 1).getDay();
+  const todayStr = getTodayString();
 
-    // 🗓 Weekday header
-    const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    weekdays.forEach(day => {
-        const cell = document.createElement("div");
-        cell.textContent = day;
-        cell.className = "text-center font-semibold text-gray-700";
-        calendar.appendChild(cell);
-    });
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  weekdays.forEach(day => {
+    const cell = document.createElement("div");
+    cell.textContent = day;
+    cell.className = "text-center font-semibold text-gray-700";
+    calendar.appendChild(cell);
+  });
 
-    // ⬜️ Empty cells before first day
-    for (let i = 0; i < offset; i++) {
-        const empty = document.createElement("div");
-        calendar.appendChild(empty);
+  for (let i = 0; i < firstDay; i++) {
+    const empty = document.createElement("div");
+    calendar.appendChild(empty);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = `${monthStr}-${String(d).padStart(2, "0")}`;
+    const current = new Date(year, month - 1, d);
+    const isWeekend = current.getDay() === 0 || current.getDay() === 6;
+    const isToday = date === todayStr;
+
+    const cell = document.createElement("div");
+    let bgColor = "bg-gray-300"; // Default
+
+    const status = userAttendance[date];
+
+    if (status?.startsWith("+")) {
+      bgColor = "bg-green-500 text-white";
+    } else if (status === "-") {
+      bgColor = "bg-red-600 text-white";
+    } else if (isWeekend) {
+      bgColor = "bg-yellow-300";
+    } else if (isToday) {
+      bgColor = "bg-blue-400 text-white";
     }
 
-    for (let d = 1; d <= daysInMonth; d++) {
-        const date = `${monthStr}-${String(d).padStart(2, "0")}`;
-        const cell = document.createElement("div");
-        const current = new Date(year, month - 1, d);
-        const status = userAttendance[date] || "-";
-        const isWeekendDay = current.getDay() === 0 || current.getDay() === 6;
-        const isToday = date === todayStr;
-        const isPast = date < todayStr;
-        const isFuture = date > todayStr;
-
-        let bgColor = "bg-gray-200"; // default
-
-        if (isWeekendDay) {
-            bgColor = "bg-yellow-300"; // 🟨 Always yellow for weekends
-        } else if (status === "+") {
-            bgColor = "bg-green-500 text-white"; // ✅ Checked-in
-        } else if (isPast) {
-            bgColor = "bg-red-400 text-white"; // ❌ Missed
-        } else if (isToday) {
-            bgColor = "bg-blue-400 text-white"; // 🔵 Today
-        }
-
-        cell.className = `p-2 rounded text-center ${bgColor}`;
-        cell.textContent = d;
-        calendar.appendChild(cell);
-    }
+    cell.className = `p-2 rounded text-center ${bgColor}`;
+    cell.textContent = d;
+    calendar.appendChild(cell);
+  }
 }
-
 
 // Month dropdown setup
 function generateMonthOptions() {
@@ -163,21 +176,57 @@ function generateMonthOptions() {
     currentMonthLabel.textContent = currentMonthStr;
 }
 
-// Check-in state check
 async function updateCheckInState(uid) {
     const today = getTodayString();
     const monthStr = today.slice(0, 7);
     const docRef = doc(db, "attendance", monthStr);
     const snap = await getDoc(docRef);
     const data = snap.exists() ? snap.data() : {};
-    const checkedIn = data[uid] && data[uid][today] === "+";
-    if (checkedIn) {
-        checkInBtn.textContent = `Checked In - ${today}`;
+    const status = data[uid]?.[today];
+
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+    const isLate = hour > 8 || (hour === 8 && minute > 10);
+
+    if (status && status.startsWith("+")) {
+        checkInBtn.textContent = `Checked In - ${status.split("@")[1] || "✅"}`;
         checkInBtn.disabled = true;
         checkInBtn.classList.add("bg-green-500");
+    } else if (isLate) {
+        checkInBtn.textContent = "⛔️ Too Late";
+        checkInBtn.disabled = true;
+        checkInBtn.classList.add("bg-gray-400");
     } else {
         checkInBtn.textContent = `Check In - ${today}`;
         checkInBtn.disabled = false;
+    }
+}
+
+async function autoMarkAbsent(uid) {
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+
+    // 08:10 dan oldin - kutamiz
+    if (hour < 8 || (hour === 8 && minute <= 10)) return;
+
+    const today = getTodayString();
+    const monthStr = today.slice(0, 7);
+    const docRef = doc(db, "attendance", monthStr);
+    const snap = await getDoc(docRef);
+    const data = snap.exists() ? snap.data() : {};
+    const userDays = data[uid] || {};
+
+    if (!userDays[today]) {
+        // Absent belgilaymiz
+        userDays[today] = "-";
+
+        await setDoc(docRef, {
+            [uid]: userDays
+        }, { merge: true });
+
+        console.warn("✅ Hodim check-in qilmagan, absent belgilandi.");
     }
 }
 
@@ -216,4 +265,5 @@ onAuthStateChanged(auth, async (user) => {
         currentMonthLabel.textContent = selectedMonth;
         loadAttendance(user.uid, selectedMonth);
     });
+    await autoMarkAbsent(user.uid); // 08:10 dan keyin absent qilamiz
 });

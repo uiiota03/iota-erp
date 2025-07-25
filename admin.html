@@ -1,86 +1,179 @@
-<!-- admin.html -->
 <!DOCTYPE html>
-<html lang="uz">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Dashboard - ERP</title>
+  <title>Admin Panel</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
   <script type="module" src="./js/admin.js" defer></script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-fadeIn {
+      animation: fadeIn 0.3s ease-out;
+    }
+  </style>
+
 </head>
 
-<body class="bg-gray-100 min-h-screen">
-  <div class="max-w-6xl mx-auto p-6">
-    <h1 class="text-3xl font-bold text-center mb-6">Admin Dashboard</h1>
+<body class="bg-gray-100 h-screen overflow-hidden">
+  <!-- Navbar -->
+  <header class="bg-white shadow fixed w-full top-0 left-0 z-10">
+    <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+      <h1 class="text-2xl font-bold">Admin Panel</h1>
+      <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+    </div>
+  </header>
 
-    <!-- Add Employee Form -->
-    <div class="bg-white p-4 rounded shadow mb-6">
-      <h2 class="text-xl font-semibold mb-4">Yangi Hodim Qo‘shish</h2>
-      <form id="addEmployeeForm" class="grid grid-cols-2 gap-4">
-        <input type="text" placeholder="Ismi" name="firstName" required class="border p-2 rounded" />
-        <input type="text" placeholder="Familiyasi" name="lastName" required class="border p-2 rounded" />
-        <input type="text" placeholder="Lavozimi" name="position" required class="border p-2 rounded" />
-        <input type="email" placeholder="Email (Login)" name="email" required class="border p-2 rounded" />
-        <input type="password" placeholder="Parol" name="password" required class="border p-2 rounded" />
-        <input type="date" placeholder="Ishga kirgan sana" name="startDate" required class="border p-2 rounded" />
-        <button type="submit" class="col-span-2 bg-blue-600 text-white py-2 rounded hover:bg-blue-700">Hodimni
-          qo‘shish</button>
+  <div class="flex pt-20">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow hidden md:block h-screen fixed top-20 left-0">
+      <nav class="p-4 space-y-2">
+        <button id="navEmployees" class="w-full text-left px-4 py-2 hover:bg-gray-100">Employees</button>
+        <button id="navAttendance" class="w-full text-left px-4 py-2 hover:bg-gray-100">Attendance</button>
+        <button id="navVacations" class="w-full text-left px-4 py-2 hover:bg-gray-100">Vacation Requests</button>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-0 md:ml-64 p-6 space-y-10 w-full overflow-y-auto h-[calc(100vh-5rem)]">
+      <!-- Employees Section -->
+      <section id="employeesSection">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-xl font-bold">Employees</h2>
+          <button id="openAddEmployeeModal" class="bg-blue-500 text-white px-4 py-2 rounded">Add Employee</button>
+        </div>
+        <div class="overflow-x-auto bg-white rounded shadow">
+          <table class="min-w-full table-auto text-left text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-2 border">#</th>
+                <th class="px-4 py-2 border">First Name</th>
+                <th class="px-4 py-2 border">Last Name</th>
+                <th class="px-4 py-2 border">Email</th>
+                <th class="px-4 py-2 border">Position</th>
+                <th class="px-4 py-2 border">Start Date</th>
+              </tr>
+            </thead>
+            <tbody id="employeeTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Attendance Section -->
+      <section id="attendanceSection" class="hidden">
+        <div class="mb-4">
+          <label for="month-select" class="mr-2 font-semibold">Select Month:</label>
+          <select id="month-select" class="border px-3 py-2 rounded"></select>
+        </div>
+        <div class="overflow-x-auto bg-white p-4 rounded shadow">
+          <table id="tabel-table" class="w-full border text-sm">
+            <thead>
+              <tr id="tabel-header">
+                <th class="border px-2 py-1">T/r</th>
+                <th class="border px-2 py-1">Ism</th>
+                <th class="border px-2 py-1">Familiya</th>
+                <th class="border px-2 py-1 text-green-600">Kelgan</th>
+                <th class="border px-2 py-1 text-red-600">Kelmagan</th>
+                <th class="border px-2 py-1">Vaqt</th>
+                <!-- Sanalar dinamik qo‘shiladi -->
+              </tr>
+            </thead>
+            <tbody id="tabel-body">
+              <!-- Hodimlar va belgilar -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Vacation Requests Section -->
+      <section id="vacationRequestsSection" class="hidden">
+        <h2 class="text-xl font-bold mb-4">Vacation Requests</h2>
+        <div class="overflow-x-auto bg-white p-4 rounded shadow">
+          <table class="min-w-full table-auto text-left text-sm">
+            <thead>
+              <tr>
+                <th class="px-4 py-2 border">Name</th>
+                <th class="px-4 py-2 border">Position</th>
+                <th class="px-4 py-2 border">Title</th>
+                <th class="px-4 py-2 border">Sent At</th>
+                <th class="px-4 py-2 border">Status</th>
+                <th class="px-4 py-2 border">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="vacationRequestsTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Add Employee Modal -->
+  <div id="addEmployeeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+      <h3 class="text-lg font-semibold mb-4">Add New Employee</h3>
+      <form id="addEmployeeForm" class="space-y-4">
+        <input name="firstName" type="text" class="w-full border px-3 py-2 rounded" placeholder="First Name" required />
+        <input name="lastName" type="text" class="w-full border px-3 py-2 rounded" placeholder="Last Name" required />
+        <input name="email" type="email" class="w-full border px-3 py-2 rounded" placeholder="Email" required />
+        <input name="password" type="password" class="w-full border px-3 py-2 rounded" placeholder="Password"
+          required />
+        <input name="position" type="text" class="w-full border px-3 py-2 rounded" placeholder="Position" required />
+        <input name="startDate" type="date" class="w-full border px-3 py-2 rounded" required />
+        <div id="addStatus" class="text-sm text-green-600"></div>
+        <div class="flex justify-between items-center">
+          <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Add</button>
+          <button type="button" onclick="document.getElementById('addEmployeeModal').classList.add('hidden')"
+            class="text-sm text-gray-500">Cancel</button>
+        </div>
       </form>
-      <p id="addStatus" class="text-green-600 mt-2"></p>
-    </div>
-
-    <!-- Tabel bo‘limi -->
-    <div class="bg-white p-4 rounded shadow mt-6">
-      <h2 class="text-xl font-semibold mb-4">🗓 Tabel</h2>
-
-      <!-- Oy tanlash -->
-      <div class="mb-4">
-        <label for="month-select" class="font-medium">Oy tanlang:</label>
-        <select id="month-select" class="border p-2 rounded ml-2">
-          <!-- Oylar dinamik yuklanadi -->
-        </select>
-      </div>
-
-      <!-- Jadval -->
-      <div class="overflow-auto">
-        <table id="tabel-table" class="w-full border text-sm">
-          <thead>
-            <tr id="tabel-header">
-              <th class="border px-2 py-1">T/r</th>
-              <th class="border px-2 py-1">Ism</th>
-              <th class="border px-2 py-1">Familiya</th>
-              <th class="border px-2 py-1 text-green-600">Kelgan</th>
-              <th class="border px-2 py-1 text-red-600">Kelmagan</th>
-              <th class="border px-2 py-1">Vaqt</th>
-              <!-- Sanalar dinamik qo‘shiladi -->
-            </tr>
-          </thead>
-          <tbody id="tabel-body">
-            <!-- Hodimlar va belgilar -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Employees List -->
-    <div class="bg-white p-4 rounded shadow">
-      <h2 class="text-xl font-semibold mb-4">Hodimlar Ro'yxati</h2>
-      <table class="w-full table-auto text-left border">
-        <thead>
-          <tr class="bg-gray-200">
-            <th class="px-4 py-2">T/r</th>
-            <th class="px-4 py-2">Ismi</th>
-            <th class="px-4 py-2">Familiyasi</th>
-            <th class="px-4 py-2">Email</th>
-            <th class="px-4 py-2">Lavozim</th>
-            <th class="px-4 py-2">Ishga kirgan sana</th>
-          </tr>
-        </thead>
-        <tbody id="employeeTableBody"></tbody>
-      </table>
     </div>
   </div>
+
+  <!-- Vacation Modal (Hidden by default) -->
+  <div id="vacationModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 relative animate-fadeIn">
+
+      <!-- Close Button -->
+      <button onclick="document.getElementById('vacationModal').classList.add('hidden')"
+        class="absolute top-3 right-3 text-gray-500 hover:text-gray-700 transition">
+        ✕
+      </button>
+
+      <!-- Modal Content Container -->
+      <div id="vacationModalContent" class="text-sm text-gray-700 space-y-2">
+        <!-- Dynamic content gets inserted here by JavaScript -->
+        <p>Loading...</p>
+      </div>
+
+    </div>
+  </div>
+
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const openBtn = document.getElementById('openAddEmployeeModal');
+      const modal = document.getElementById('addEmployeeModal');
+
+      if (openBtn && modal) {
+        openBtn.addEventListener('click', () => {
+          modal.classList.remove('hidden');
+        });
+      }
+    });
+  </script>
+
 </body>
 
 </html>
