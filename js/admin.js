@@ -470,6 +470,18 @@ document.getElementById("navVacations").addEventListener("click", () => {
   loadVacationRequests();
 });
 
+document.addEventListener("DOMContentLoaded", () => {
+  const openModalBtn = document.getElementById("openAddEmployeeModal");
+  const modal = document.getElementById("addEmployeeModal");
+
+  if (openModalBtn && modal) {
+    openModalBtn.addEventListener("click", () => {
+      modal.classList.remove("hidden");
+    });
+  }
+});
+
+
 
 /** Initial load **/
 generateMonths();

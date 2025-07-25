@@ -29,16 +29,28 @@
 
 <body class="bg-gray-100 h-screen overflow-hidden">
   <!-- Navbar -->
+  <!-- Navbar -->
   <header class="bg-white shadow fixed w-full top-0 left-0 z-10">
     <div class="container mx-auto px-6 py-4 flex justify-between items-center">
       <h1 class="text-2xl font-bold">Admin Panel</h1>
-      <button id="logoutBtn" class="bg-red-500 text-white px-4 py-2 rounded">Logout</button>
+
+      <!-- Mobile toggle -->
+      <!-- Navbar ichida, Logout tugmasi oldidan qo‘ying -->
+      <button id="sidebarToggle" class="md:hidden text-gray-700 focus:outline-none">
+        <!-- Icon (3 ta chiziq) -->
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+      </button>
+
+      <button id="logoutBtn" class="hidden md:inline-block bg-red-500 text-white px-4 py-2 rounded">Logout</button>
     </div>
   </header>
 
   <div class="flex pt-20">
     <!-- Sidebar -->
-    <aside class="w-64 bg-white shadow hidden md:block h-screen fixed top-20 left-0">
+    <aside id="sidebar" class="w-64 bg-white shadow hidden md:block h-screen fixed top-20 left-0 z-20">
       <nav class="p-4 space-y-2">
         <button id="navEmployees" class="w-full text-left px-4 py-2 hover:bg-gray-100">Employees</button>
         <button id="navAttendance" class="w-full text-left px-4 py-2 hover:bg-gray-100">Attendance</button>
@@ -169,6 +181,18 @@
       if (openBtn && modal) {
         openBtn.addEventListener('click', () => {
           modal.classList.remove('hidden');
+        });
+      }
+    });
+  </script>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const sidebar = document.getElementById("sidebar");
+      const toggleBtn = document.getElementById("sidebarToggle");
+
+      if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener("click", () => {
+          sidebar.classList.toggle("hidden");
         });
       }
     });
