@@ -268,7 +268,7 @@ async function markApprovedVacationsOnCalendar() {
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     // ❌ Login qilinmagan foydalanuvchi
-    return (window.location.href = "index.html");
+    return (window.location.href = "login.html");
   }
 
   // 🔍 Firestore'dan tekshiramiz
@@ -279,7 +279,7 @@ onAuthStateChanged(auth, async (user) => {
     // ❌ Firestore’da foydalanuvchi mavjud emas => Auth'dan chiqaramiz
     console.warn("Foydalanuvchi Firestore’da topilmadi. Logout qilinmoqda...");
     await signOut(auth);
-    return (window.location.href = "index.html");
+    return (window.location.href = "login.html");
   }
 
   // ✅ User ma’lumotlari mavjud — davom etamiz
