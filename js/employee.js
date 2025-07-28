@@ -221,32 +221,6 @@ function generateMonthOptions() {
     currentMonthLabel.textContent = getMonthString(now);
 }
 
-async function updateCheckInState(uid) {
-    const today = getTodayString();
-    const monthStr = today.slice(0, 7);
-    const docRef = doc(db, "attendance", monthStr);
-    const snap = await getDoc(docRef);
-    const data = snap.exists() ? snap.data() : {};
-    const status = data[uid]?.[today];
-
-    const now = new Date();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-    const isLate = hour > 8 || (hour === 8 && minute > 10);
-
-    if (status && status.startsWith("+@")) {
-        const timeStr = status.split("@")[1];
-        const [h, m] = timeStr.split(":").map(Number);
-        const isLate = h > 8 || (h === 8 && m > 10);
-
-        checkInBtn.textContent = isLate
-            ? `Kechikib keldi - ${timeStr}`
-            : `Checked In - ${timeStr}`;
-        checkInBtn.disabled = true;
-        checkInBtn.classList.add(isLate ? "bg-yellow-400" : "bg-green-500");
-    }
-}
-
 async function markApprovedVacationsOnCalendar() {
     const user = auth.currentUser;
     if (!user) return;
@@ -285,55 +259,99 @@ async function markApprovedVacationsOnCalendar() {
 
 
 // Auth state check
+async function updateCheckInState(uid) {
+    const today = getTodayString();
+    const monthStr = today.slice(0, 7);
+    const docRef = doc(db, "attendance", monthStr);
+    const snap = await getDoc(docRef);
+    const data = snap.exists() ? snap.data() : {};
+    const status = data[uid]?.[today];
+
+    // ⏰ Vaqtni aniqlaymiz
+    const now = new Date();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
+
+    if (status && status.startsWith("+@")) {
+        const timeStr = status.split("@")[1];
+        const [h, m] = timeStr.split(":").map(Number);
+        const isLate = h > 8 || (h === 8 && m > 10);
+
+        checkInBtn.textContent = isLate
+            ? `Kechikib keldi - ${timeStr}`
+            : `Checked In - ${timeStr}`;
+        checkInBtn.disabled = true;
+        checkInBtn.classList.add("opacity-50", "cursor-not-allowed", isLate ? "bg-yellow-400" : "bg-green-500");
+        checkInBtn.classList.remove("bg-blue-500"); // asl rangdan tozalash
+    } else {
+        // 👇 Check-in qilmagan bo‘lsa, ammo vaqt 08:10 dan o‘tgan bo‘lsa tugmani block qilamiz
+        if (hour > 8 || (hour === 8 && minute > 10)) {
+            checkInBtn.textContent = "Check-in vaqti tugagan";
+            checkInBtn.disabled = true;
+            checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
+            checkInBtn.classList.remove("bg-blue-500");
+        } else {
+            checkInBtn.textContent = "Check In";
+            checkInBtn.disabled = false;
+            checkInBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-red-400", "bg-yellow-400", "bg-green-500");
+            checkInBtn.classList.add("bg-blue-500");
+        }
+    }
+}
+
+// 🔐 Foydalanuvchi holatini kuzatamiz
 onAuthStateChanged(auth, async (user) => {
     if (!user) {
         // ❌ Login qilinmagan foydalanuvchi
-        localStorage.removeItem("userData"); // ✅ localStorage tozalandi
+        localStorage.removeItem("userData");
         return (window.location.href = "index.html");
     }
 
-    // 🔍 Firestore'dan tekshiramiz
+    // 🔍 Firestore'dan userni tekshiramiz
     const userRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userRef);
 
     if (!userSnap.exists()) {
-        console.warn("Firestore’da user topilmadi.");
-        localStorage.removeItem("userData"); // ✅ localStorage tozalandi
+        console.warn("❌ Firestore’da user topilmadi.");
+        localStorage.removeItem("userData");
         await signOut(auth);
         return (window.location.href = "index.html");
     }
 
-    // ✅ User ma’lumotlari mavjud — davom etamiz
+    // ✅ User ma’lumotlari mavjud
     const userData = userSnap.data();
-
-    // localStorage'da saqlaymiz (agar kerak bo‘lsa)
     localStorage.setItem("userData", JSON.stringify(userData));
 
-    // DOM elementlarni to‘ldiramiz
+    // 👤 UI ma’lumotlarini chiqaramiz
     nameEl.textContent = `${userData.firstName} ${userData.lastName}`;
     roleEl.textContent = userData.position;
     startDateEl.textContent = userData.startDate;
 
+    // 📅 Dropdownga oylik variantlarni qo‘shamiz
     generateMonthOptions();
 
     const thisMonth = getMonthString(new Date());
-    loadAttendance(user.uid, thisMonth);
-    updateCheckInState(user.uid);
+    currentMonthLabel.textContent = thisMonth;
+    await loadAttendance(user.uid, thisMonth);
+    await markApprovedVacationsOnCalendar();
+    await updateCheckInState(user.uid); // sahifa yuklanganda tugmani tekshiramiz
 
+    // ✅ Tugma bosilganda
     checkInBtn.addEventListener("click", async () => {
         await checkIn(user.uid);
-        updateCheckInState(user.uid);
+        await updateCheckInState(user.uid);
     });
 
+    // 🚪 Logout
     logoutBtn.addEventListener("click", () => {
         localStorage.removeItem("userData");
         signOut(auth);
     });
 
+    // 📅 Oyni almashtirish
     monthSelect.addEventListener("change", async () => {
         const selectedMonth = monthSelect.value;
         currentMonthLabel.textContent = selectedMonth;
-
         await loadAttendance(user.uid, selectedMonth);
         await markApprovedVacationsOnCalendar();
     });
