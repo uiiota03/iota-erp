@@ -239,6 +239,34 @@ async function drawTabel(monthStr, employees) {
       tr.appendChild(cell);
     }
 
+    // === Working hours calculation ===
+    let totalMinutesWorked = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
+      const rawStatus = attendanceData?.[emp.uid]?.[dateStr] || "";
+      if (rawStatus.startsWith("+@")) {
+        const timeStr = rawStatus.split("@")[1];
+        let [hour, min] = timeStr.split(":").map(Number);
+        let checkIn = new Date(year, month - 1, day, hour, min);
+        const endOfDay = new Date(year, month - 1, day, 17, 0);
+
+        // Agar 8:10 dan oldin bo‘lsa → 8:00 hisoblanadi
+        const eightTen = new Date(year, month - 1, day, 8, 10);
+        if (checkIn <= eightTen) {
+          totalMinutesWorked += 8 * 60;
+        } else {
+          const diff = Math.max(0, (endOfDay - checkIn) / 60000); // in minutes
+          totalMinutesWorked += diff;
+        }
+      }
+    }
+
+    const workedHours = Math.floor(totalMinutesWorked / 60);
+    const workedMinutes = totalMinutesWorked % 60;
+
+    const timeTd = tr.querySelector("td:nth-child(6)");
+    timeTd.textContent = `${workedHours} soat ${workedMinutes} daqiqa`;
+
     tabelBody.appendChild(tr);
     document.getElementById(`present-${emp.uid}`).textContent = present;
     document.getElementById(`absent-${emp.uid}`).textContent = absent;

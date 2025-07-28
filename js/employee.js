@@ -265,40 +265,28 @@ async function markApprovedVacationsOnCalendar() {
 
 
 // Auth state check
-onAuthStateChanged(auth, async (user) => {
-    if (!user) return (window.location.href = "index.html");
-    const storedData = localStorage.getItem("userData");
-    if (!storedData) {
-        alert("User data not found.");
-        return signOut(auth);
+onAuthStateChanged(auth, async user => {
+    if (user) {
+        const uid = user.uid;
+        const userDocRef = doc(db, "users", uid);
+        const userDocSnap = await getDoc(userDocRef);
+
+        if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            // ✅ Role bo‘yicha yo‘naltirish
+            if (userData.role === "admin") {
+                window.location.href = "admin.html";
+            } else {
+                window.location.href = "employee.html";
+            }
+        } else {
+            // ❌ Foydalanuvchi Auth’da bor, lekin Firestore’da yo‘q
+            console.warn("User Firestore’dan topilmadi. Sign out qilinmoqda...");
+            await signOut(auth);
+            window.location.href = "index.html";
+        }
+    } else {
+        // ❌ Umuman login bo‘lmagan foydalanuvchi
+        window.location.href = "index.html";
     }
-
-    const userData = JSON.parse(storedData);
-    nameEl.textContent = `${userData.firstName} ${userData.lastName}`;
-    roleEl.textContent = userData.position;
-    startDateEl.textContent = userData.startDate;
-
-    generateMonthOptions();
-
-    const thisMonth = getMonthString(new Date());
-    loadAttendance(user.uid, thisMonth);
-    updateCheckInState(user.uid);
-
-    checkInBtn.addEventListener("click", async () => {
-        await checkIn(user.uid);
-        updateCheckInState(user.uid);
-    });
-
-    logoutBtn.addEventListener("click", () => {
-        localStorage.removeItem("userData");
-        signOut(auth);
-    });
-
-    monthSelect.addEventListener("change", async () => {
-        const selectedMonth = monthSelect.value;
-        currentMonthLabel.textContent = selectedMonth;
-
-        await loadAttendance(user.uid, selectedMonth); // hamisha kutamiz
-        await markApprovedVacationsOnCalendar();       // yangi oyning vacationlari
-    });
 });

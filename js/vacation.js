@@ -8,6 +8,7 @@ let currentUser = null;
 onAuthStateChanged(auth, async user => {
     if (user) {
         currentUser = user;
+        console.log("✅ Auth foydalanuvchi:", user.uid);
         await loadVacationRequests();
     }
 });
@@ -55,26 +56,51 @@ form.addEventListener("submit", async e => {
 });
 
 async function loadVacationRequests() {
-    tableBody.innerHTML = "";
-    const q = query(collection(db, "vacationRequests"), where("uid", "==", currentUser.uid));
-    const snapshot = await getDocs(q);
+  const tableBody = document.getElementById("vacationTableBody");
+  if (!tableBody) {
+    console.error("⛔ tableBody elementi topilmadi");
+    return;
+  }
 
-    snapshot.forEach(doc => {
-        const data = doc.data();
-        const row = document.createElement("tr");
+  if (!currentUser || !currentUser.uid) {
+    console.warn("⛔ currentUser aniqlanmadi");
+    return;
+  }
+  console.log("user :", currentUser.uid);
+  
 
-        row.innerHTML = `
+  tableBody.innerHTML = "";
+
+  const q = query(collection(db, "vacationRequests"), where("uid", "==", currentUser.uid));
+  const snapshot = await getDocs(q);
+
+  console.log("Vacation hujjatlar soni:", snapshot.size);
+
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const row = document.createElement("tr");
+
+    const statusColor =
+      data.status === "Approved"
+        ? "bg-green-100 text-green-800"
+        : data.status === "Rejected"
+          ? "bg-rose-100 text-rose-800"
+          : "bg-gray-100 text-gray-800";
+
+    row.innerHTML = `
       <td class="border p-2">${data.createdAt?.toDate().toLocaleDateString() || "-"}</td>
       <td class="border p-2">${data.purpose}</td>
       <td class="border p-2">${data.startDate} - ${data.endDate}</td>
-      <td class="border p-2">${data.status}</td>
+      <td class="border p-2 text-center">
+        <span class="px-2 py-1 rounded-full ${statusColor}">${data.status}</span>
+      </td>
       <td class="border p-2">
         <button onclick='showModal(${JSON.stringify(data)})'
           class="text-blue-600 underline hover:text-blue-800">Ko‘rish</button>
       </td>
     `;
-        tableBody.appendChild(row);
-    });
+    tableBody.appendChild(row);
+  });
 }
 
 window.showModal = function (data) {
@@ -107,7 +133,7 @@ Requested on: ${createdAtText}
 };
 
 window.closeModal = function () {
-  document.getElementById("viewModal").classList.add("hidden");
+    document.getElementById("viewModal").classList.add("hidden");
 };
 
 
