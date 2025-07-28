@@ -266,54 +266,54 @@ async function markApprovedVacationsOnCalendar() {
 
 // Auth state check
 onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    // ❌ Login qilinmagan foydalanuvchi
-    return (window.location.href = "login.html");
-  }
+    if (!user) {
+        // ❌ Login qilinmagan foydalanuvchi
+        return (window.location.href = "index.html");
+    }
 
-  // 🔍 Firestore'dan tekshiramiz
-  const userRef = doc(db, "users", user.uid);
-  const userSnap = await getDoc(userRef);
+    // 🔍 Firestore'dan tekshiramiz
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
 
-  if (!userSnap.exists()) {
-    // ❌ Firestore’da foydalanuvchi mavjud emas => Auth'dan chiqaramiz
-    console.warn("Foydalanuvchi Firestore’da topilmadi. Logout qilinmoqda...");
-    await signOut(auth);
-    return (window.location.href = "login.html");
-  }
+    if (!userSnap.exists()) {
+        console.warn("Firestore’da user topilmadi.");
+        localStorage.removeItem("userData"); // ✅ localStorage tozalandi
+        await signOut(auth);
+        return (window.location.href = "index.html");
+    }
 
-  // ✅ User ma’lumotlari mavjud — davom etamiz
-  const userData = userSnap.data();
+    // ✅ User ma’lumotlari mavjud — davom etamiz
+    const userData = userSnap.data();
 
-  // localStorage'da saqlaymiz (agar kerak bo‘lsa)
-  localStorage.setItem("userData", JSON.stringify(userData));
+    // localStorage'da saqlaymiz (agar kerak bo‘lsa)
+    localStorage.setItem("userData", JSON.stringify(userData));
 
-  // DOM elementlarni to‘ldiramiz
-  nameEl.textContent = `${userData.firstName} ${userData.lastName}`;
-  roleEl.textContent = userData.position;
-  startDateEl.textContent = userData.startDate;
+    // DOM elementlarni to‘ldiramiz
+    nameEl.textContent = `${userData.firstName} ${userData.lastName}`;
+    roleEl.textContent = userData.position;
+    startDateEl.textContent = userData.startDate;
 
-  generateMonthOptions();
+    generateMonthOptions();
 
-  const thisMonth = getMonthString(new Date());
-  loadAttendance(user.uid, thisMonth);
-  updateCheckInState(user.uid);
-
-  checkInBtn.addEventListener("click", async () => {
-    await checkIn(user.uid);
+    const thisMonth = getMonthString(new Date());
+    loadAttendance(user.uid, thisMonth);
     updateCheckInState(user.uid);
-  });
 
-  logoutBtn.addEventListener("click", () => {
-    localStorage.removeItem("userData");
-    signOut(auth);
-  });
+    checkInBtn.addEventListener("click", async () => {
+        await checkIn(user.uid);
+        updateCheckInState(user.uid);
+    });
 
-  monthSelect.addEventListener("change", async () => {
-    const selectedMonth = monthSelect.value;
-    currentMonthLabel.textContent = selectedMonth;
+    logoutBtn.addEventListener("click", () => {
+        localStorage.removeItem("userData");
+        signOut(auth);
+    });
 
-    await loadAttendance(user.uid, selectedMonth);
-    await markApprovedVacationsOnCalendar();
-  });
+    monthSelect.addEventListener("change", async () => {
+        const selectedMonth = monthSelect.value;
+        currentMonthLabel.textContent = selectedMonth;
+
+        await loadAttendance(user.uid, selectedMonth);
+        await markApprovedVacationsOnCalendar();
+    });
 });
