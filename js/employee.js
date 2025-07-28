@@ -265,28 +265,55 @@ async function markApprovedVacationsOnCalendar() {
 
 
 // Auth state check
-onAuthStateChanged(auth, async user => {
-    if (user) {
-        const uid = user.uid;
-        const userDocRef = doc(db, "users", uid);
-        const userDocSnap = await getDoc(userDocRef);
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    // ❌ Login qilinmagan foydalanuvchi
+    return (window.location.href = "index.html");
+  }
 
-        if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            // ✅ Role bo‘yicha yo‘naltirish
-            if (userData.role === "admin") {
-                window.location.href = "admin.html";
-            } else {
-                window.location.href = "employee.html";
-            }
-        } else {
-            // ❌ Foydalanuvchi Auth’da bor, lekin Firestore’da yo‘q
-            console.warn("User Firestore’dan topilmadi. Sign out qilinmoqda...");
-            await signOut(auth);
-            window.location.href = "index.html";
-        }
-    } else {
-        // ❌ Umuman login bo‘lmagan foydalanuvchi
-        window.location.href = "index.html";
-    }
+  // 🔍 Firestore'dan tekshiramiz
+  const userRef = doc(db, "users", user.uid);
+  const userSnap = await getDoc(userRef);
+
+  if (!userSnap.exists()) {
+    // ❌ Firestore’da foydalanuvchi mavjud emas => Auth'dan chiqaramiz
+    console.warn("Foydalanuvchi Firestore’da topilmadi. Logout qilinmoqda...");
+    await signOut(auth);
+    return (window.location.href = "index.html");
+  }
+
+  // ✅ User ma’lumotlari mavjud — davom etamiz
+  const userData = userSnap.data();
+
+  // localStorage'da saqlaymiz (agar kerak bo‘lsa)
+  localStorage.setItem("userData", JSON.stringify(userData));
+
+  // DOM elementlarni to‘ldiramiz
+  nameEl.textContent = `${userData.firstName} ${userData.lastName}`;
+  roleEl.textContent = userData.position;
+  startDateEl.textContent = userData.startDate;
+
+  generateMonthOptions();
+
+  const thisMonth = getMonthString(new Date());
+  loadAttendance(user.uid, thisMonth);
+  updateCheckInState(user.uid);
+
+  checkInBtn.addEventListener("click", async () => {
+    await checkIn(user.uid);
+    updateCheckInState(user.uid);
+  });
+
+  logoutBtn.addEventListener("click", () => {
+    localStorage.removeItem("userData");
+    signOut(auth);
+  });
+
+  monthSelect.addEventListener("change", async () => {
+    const selectedMonth = monthSelect.value;
+    currentMonthLabel.textContent = selectedMonth;
+
+    await loadAttendance(user.uid, selectedMonth);
+    await markApprovedVacationsOnCalendar();
+  });
 });
