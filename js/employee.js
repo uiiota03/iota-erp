@@ -66,12 +66,35 @@ async function checkIn(uid) {
     const hour = now.getHours();
     const minute = now.getMinutes();
 
-    if (hour > 8 || (hour === 8 && minute > 10)) {
-        alert("⚠️ Siz kechikdingiz, ammo check-in qabul qilindi.");
-        // Continue check-in anyway
+    const today = getTodayString();
+    const monthStr = today.slice(0, 7);
+    const docRef = doc(db, "attendance", monthStr);
+    const snap = await getDoc(docRef);
+    let data = snap.exists() ? snap.data() : {};
+
+    if (!data[uid]) data[uid] = {};
+
+    // 🔴 17:00 dan kech — "-" belgilaymiz, tugmani o‘chiramiz
+    if (hour >= 17) {
+        alert("⚠️ Soat 17:00 dan kech bo‘ldi. Siz ishga kelmagan deb belgilandingiz.");
+        data[uid][today] = "-"; // ❌ kelmadi deb belgilash
+        await setDoc(docRef, data);
+
+        checkInBtn.disabled = true;
+        checkInBtn.textContent = "Checked";
+        checkInBtn.classList.add("opacity-50", "cursor-not-allowed"); // ixtiyoriy vizual effekt
+
+        loadAttendance(uid, monthStr);
+        updateCheckInState(uid);
+        return;
     }
 
+    // ⚠️ 08:10 dan kech — alert chiqadi, ammo davom etadi
+    if (hour > 8 || (hour === 8 && minute > 10)) {
+        alert("⚠️ Siz kechikdingiz, ammo check-in qabul qilindi.");
+    }
 
+    // ✅ Geolocation tekshiruvi
     return new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
@@ -83,32 +106,29 @@ async function checkIn(uid) {
             );
 
             if (distance > MAX_DISTANCE_KM) {
-                alert("Siz ofis hududida emassiz. Check-in amalga oshmadi.");
+                alert("📍 Siz ofis hududida emassiz. Check-in amalga oshmadi.");
                 return reject("Out of range");
             }
 
-            const now = new Date();
             const timeStr = now.toTimeString().slice(0, 5); // "08:03"
-            const today = getTodayString();
-            const monthStr = today.slice(0, 7);
-
-            const docRef = doc(db, "attendance", monthStr);
-            const snap = await getDoc(docRef);
-            let data = snap.exists() ? snap.data() : {};
-
-            if (!data[uid]) data[uid] = {};
-            data[uid][today] = `+@${timeStr}`; // ✅ saqlanadi: +@08:03
+            data[uid][today] = `+@${timeStr}`; // ✅ saqlanadi
 
             await setDoc(docRef, data);
+
+            checkInBtn.disabled = true;
+            checkInBtn.textContent = "Checked";
+            checkInBtn.classList.add("opacity-50", "cursor-not-allowed"); // ixtiyoriy
+
             loadAttendance(uid, monthStr);
             updateCheckInState(uid);
             resolve();
         }, (err) => {
-            alert("Geolocation permission denied.");
+            alert("📵 Geolocation permission rad etildi.");
             reject(err);
         });
     });
 }
+
 
 async function loadAttendance(uid, monthStr) {
     const [year, month] = monthStr.split("-").map(Number);
