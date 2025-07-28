@@ -268,6 +268,7 @@ async function markApprovedVacationsOnCalendar() {
 onAuthStateChanged(auth, async (user) => {
     if (!user) {
         // ❌ Login qilinmagan foydalanuvchi
+        localStorage.removeItem("userData"); // ✅ localStorage tozalandi
         return (window.location.href = "index.html");
     }
 
