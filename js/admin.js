@@ -10,7 +10,9 @@ import {
   getDoc,
   setDoc,
   doc,
-  updateDoc
+  updateDoc,
+  query,
+  where
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 import { auth, db } from "./firebase-config.js";
 
@@ -28,6 +30,39 @@ const tabelBody = document.getElementById("tabel-body");
 
 let globalEmployees = [];
 
+document.addEventListener("DOMContentLoaded", async () => {
+  const monthSelect = document.getElementById("month-select");
+
+  if (!monthSelect) {
+    console.error("❌ monthSelect elementi topilmadi!");
+    return;
+  }
+
+  // 1. Oylar ro'yxatini generate qilamiz
+  generateMonths();
+
+  // 2. Ishchilarni yuklaymiz va globalga saqlaymiz
+  globalEmployees = await loadEmployees();
+
+  // 3. Hozirgi oy bo'yicha jadvalni chizamiz
+  const selectedMonth = monthSelect.value || formatMonth(new Date());
+  await drawTabel(selectedMonth, globalEmployees);
+
+  // 4. Oy tanlanganda qayta chizamiz
+  monthSelect.addEventListener("change", () => {
+    const selected = monthSelect.value;
+    drawTabel(selected, globalEmployees);
+  });
+});
+
+
+// Util function: calculate difference between 2 dates in days
+function getDaysDiff(start, end) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const diffTime = endDate.getTime() - startDate.getTime();
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+}
 
 function formatDate(dateObj) {
   const y = dateObj.getFullYear();
@@ -42,23 +77,25 @@ function getTodayString() {
 }
 
 const formatMonth = (date) => date.toISOString().slice(0, 7);
-
+function getMonthString(date) {
+  return date.toISOString().slice(0, 7);
+}
 function generateMonths() {
   const now = new Date();
-  for (let i = -1; i < 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, -1);
+  const currentYear = now.getFullYear();
+  for (let i = 1; i < 13; i++) {
+    const d = new Date(currentYear, i, 0);
     const val = formatMonth(d);
     const option = document.createElement("option");
     option.value = val;
     option.textContent = d.toLocaleString("default", { month: "long", year: "numeric" });
 
     // ✅ Hozirgi oy default tanlanadi
-    if (i === -1) option.selected = true;
+    if (val === getMonthString(now)) option.selected = true;
 
     monthSelect.appendChild(option);
   }
 }
-
 
 async function loadAttendanceData(monthStr) {
   if (!monthStr) {
@@ -72,13 +109,6 @@ async function loadAttendanceData(monthStr) {
   if (!docSnap.exists()) return {};
   return docSnap.data();
 }
-
-async function testLoad() {
-  const data = await loadAttendanceData("2025-07");
-  console.log("✅ Attendance Data:", data);
-}
-
-testLoad()
 
 async function saveAttendance(uid, day, status) {
   const monthStr = day.slice(0, 7);
@@ -107,8 +137,10 @@ async function drawTabel(monthStr, employees) {
   const [year, month] = monthStr.split("-").map(Number);
   const daysInMonth = new Date(year, month, 0).getDate();
   const attendanceData = await loadAttendanceData(monthStr);
-  const todayStr = formatDate(new Date());
+  const vacationData = await loadApprovedVacations();
+  const userVacations = vacationData?.[employees.uid] || [];
   const today = new Date();
+  const todayStr = formatDate(today);
 
   // === Header kunlar ===
   for (let day = 1; day <= daysInMonth; day++) {
@@ -118,14 +150,6 @@ async function drawTabel(monthStr, employees) {
 
     const th = document.createElement("th");
     th.className = "border border-gray-300 px-2 py-1 text-xs text-center";
-    if (isToday) {
-      th.classList.add("bg-blue-100", "text-blue-800", "font-semibold");
-    } else if (isWeekend) {
-      th.classList.add("bg-gray-100", "text-gray-600");
-    } else {
-      th.classList.add("bg-white");
-    }
-
     th.innerHTML = `${day}<br><span class="text-gray-400 text-[10px]">${["Yak", "Du", "Se", "Ch", "Pa", "Ju", "Sh"][date.getDay()]}</span>`;
     tabelHeader.appendChild(th);
   }
@@ -157,31 +181,46 @@ async function drawTabel(monthStr, employees) {
       const cell = document.createElement("td");
       cell.className = "border border-gray-300 px-2 py-1 text-center text-sm";
       cell.contentEditable = true;
+      cell.id = `day-${dateStr}`;
       cell.dataset.uid = emp.uid;
       cell.dataset.day = dateStr;
 
+      // 1. Attendance status
       let status = attendanceData?.[emp.uid]?.[dateStr] || "";
       if (status.includes("@")) status = status.split("@")[0];
+
+      // 1. Vacation check
+      const userVacations = vacationData[emp.uid] || [];
+      const isOnVacation = userVacations.some(vac => dateStr >= vac.from && dateStr <= vac.to);
+      console.log("userVacations :", userVacations);
+      console.log("isOnVacation :", isOnVacation);
+
+      // 2. Determine display status
+      if (!status && isOnVacation) {
+        status = "V";
+      }
+
       cell.textContent = status;
 
-      // Ranglar
-      if (isFuture) {
-        cell.classList.add("bg-slate-100", "text-slate-400");
+      if (status === "V") {
+        cell.classList.add("bg-yellow-50", "text-yellow-600", "font-medium");
       } else if (status === "+") {
         cell.classList.add("bg-green-50", "text-green-700", "font-medium");
         present++;
       } else if (status === "-") {
         cell.classList.add("bg-red-50", "text-red-600", "font-medium");
         absent++;
-      } else if (isToday) {
-        cell.classList.add("bg-blue-50", "text-blue-600");
       } else if (isWeekend) {
         cell.classList.add("bg-gray-100", "text-gray-500");
+      } else if (isToday) {
+        cell.classList.add("bg-blue-50", "text-blue-600");
+      } else if (isFuture) {
+        cell.classList.add("bg-slate-100", "text-slate-400");
       } else {
         cell.classList.add("bg-white", "text-gray-400");
       }
 
-      // Save + refresh
+      // Save handler
       cell.addEventListener("blur", async () => {
         const newStatus = cell.textContent.trim();
         let valueToSave = newStatus;
@@ -253,49 +292,80 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-monthSelect.addEventListener("change", () => {
-  drawTabel(monthSelect.value, globalEmployees);
-});
-
 /** Load employee list and call drawTabel **/
 async function loadEmployees() {
-  const querySnapshot = await getDocs(collection(db, "users"));
-  globalEmployees = [];
+  const employeeTableBody = document.getElementById("employeeTableBody");
   employeeTableBody.innerHTML = "";
 
-  querySnapshot.forEach((docSnap) => {
-    const data = docSnap.data();
-    if (data.role === "employee") {
-      globalEmployees.push({
-        uid: data.uid,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
-        position: data.position,
-        startDate: data.startDate
-      });
+  const usersSnapshot = await getDocs(collection(db, "users"));
+  let index = 1;
+  const employees = [];
 
-      const row = `
-        <tr>
-          <td class="px-4 py-2">${globalEmployees.length}</td>
-          <td class="px-4 py-2">${data.firstName}</td>
-          <td class="px-4 py-2">${data.lastName}</td>
-          <td class="px-4 py-2">${data.email}</td>
-          <td class="px-4 py-2">${data.position}</td>
-          <td class="px-4 py-2">${data.startDate}</td>
-        </tr>
-      `;
-      employeeTableBody.innerHTML += row;
-    }
-  });
+  for (const userDoc of usersSnapshot.docs) {
+    const data = userDoc.data();
+    const {
+      firstName,
+      lastName,
+      email,
+      position,
+      startDate,
+      vacationLeft
+    } = data;
 
-  // render tabel for default selected month
-  if (monthSelect.value) {
-    drawTabel(monthSelect.value, globalEmployees);
+    // Push to array for drawTabel
+    employees.push({
+      uid: userDoc.id, // UID from doc ID
+      firstName,
+      lastName,
+      email,
+      position,
+      startDate,
+      vacationLeft
+    });
+
+    // Display in employee table
+    const workDuration = calculateWorkDuration(startDate);
+
+    const row = `
+  <tr>
+    <td class="border px-4 py-2">${index++}</td>
+    <td class="border px-4 py-2">${firstName}</td>
+    <td class="border px-4 py-2">${lastName}</td>
+    <td class="border px-4 py-2">${email}</td>
+    <td class="border px-4 py-2">${position}</td>
+    <td class="border px-4 py-2">${startDate}</td>
+    <td class="border px-4 py-2">${workDuration}</td>
+    <td class="border px-4 py-2 text-green-600 font-semibold">${vacationLeft} days</td>
+  </tr>
+`;
+
+    employeeTableBody.insertAdjacentHTML("beforeend", row);
+  }
+
+  return employees; // ✅ employees ro'yxatini qaytaramiz
+}
+
+function calculateWorkDuration(startDateStr) {
+  const startDate = new Date(startDateStr);
+  const today = new Date();
+
+  let totalMonths = (today.getFullYear() - startDate.getFullYear()) * 12;
+  totalMonths += today.getMonth() - startDate.getMonth();
+
+  if (today.getDate() < startDate.getDate()) {
+    totalMonths--;
+  }
+
+  totalMonths = Math.max(0, totalMonths);
+  const years = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+
+  if (years > 0 && months > 0) {
+    return `${years} yil ${months} oy`;
+  } else if (years > 0) {
+    return `${years} yil`;
   } else {
-    const today = new Date();
-    const defaultMonth = formatMonth(today); // fallback
-    drawTabel(defaultMonth, globalEmployees);
+    return `${months} oy`;
   }
 }
 
@@ -320,7 +390,8 @@ form.addEventListener("submit", async (e) => {
       email,
       position,
       startDate,
-      role: "employee"
+      role: "employee",
+      vacationLeft: 21
     });
 
     statusMsg.textContent = "✅ Hodim muvaffaqiyatli qo‘shildi!";
@@ -400,8 +471,6 @@ document.addEventListener("DOMContentLoaded", () => {
   navVacations.addEventListener("click", () => showSection(vacationRequestsSection));
 });
 
-// admin.js
-
 // Modal elementlar
 const vacationModal = document.getElementById("vacationModal");
 const vacationModalContent = document.getElementById("vacationModalContent");
@@ -444,23 +513,76 @@ async function loadVacationRequests() {
         <p><strong>From:</strong> ${data.startDate}</p>
         <p><strong>To:</strong> ${data.endDate}</p>
         <p><strong>Status:</strong> ${data.status || "Pending"}</p>
-        <div class="flex justify-end space-x-2 mt-4">
-          <button class="bg-green-500 text-white px-4 py-2 rounded" onclick="handleVacationAction('${id}', 'Approved')">Approve</button>
-          <button class="bg-red-500 text-white px-4 py-2 rounded" onclick="handleVacationAction('${id}', 'Rejected')">Reject</button>
-          <button class="text-gray-600" onclick="vacationModal.classList.add('hidden')">Close</button>
-        </div>
+          <div class="flex justify-end space-x-2 mt-4">
+    <button class="bg-green-500 text-white px-4 py-2 rounded" onclick='handleVacationAction("${id}", "Approved", ${JSON.stringify(data)})'>Approve</button>
+    <button class="bg-red-500 text-white px-4 py-2 rounded" onclick='handleVacationAction("${id}", "Rejected", ${JSON.stringify(data)})'>Reject</button>
+    <button class="text-gray-600" onclick="vacationModal.classList.add('hidden')">Close</button>
+  </div>
       `;
       vacationModal.classList.remove("hidden");
     });
   });
 }
 
-window.handleVacationAction = async function (id, status) {
-  const ref = doc(db, "vacationRequests", id);
-  await updateDoc(ref, { status });
-  vacationModal.classList.add('hidden');
-  loadVacationRequests(); // reload list
-};
+async function handleVacationAction(vacationId, action) {
+  const vacationRef = doc(db, "vacationRequests", vacationId);
+
+  try {
+    // 1. Vacation status yangilash
+    await updateDoc(vacationRef, { status: action });
+
+    const vacationSnap = await getDoc(vacationRef);
+    const vacationData = vacationSnap.data();
+
+    console.log("Vacation ID:", vacationId);
+    console.log("Vacation Data:", vacationData);
+
+    const uid = vacationData.uid;
+
+    if (action === "Approved") {
+      const start = new Date(vacationData.startDate);
+      const end = new Date(vacationData.endDate);
+
+      // Sanalar orasidagi kunlar soni (to'liq kiritilgan kunlar ham qo‘shiladi)
+      const timeDiff = end.getTime() - start.getTime();
+      const dayCount = Math.floor(timeDiff / (1000 * 3600 * 24)) + 1;
+
+      // Faqat users dan olish kerak: real-time yangilanishi uchun
+      const userRef = doc(db, "users", uid);
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        console.error("User not found for UID:", uid);
+        return;
+      }
+
+      const userData = userSnap.data();
+      const currentVacationLeft = userData.vacationLeft ?? 0;
+
+      // ❗ YANGILIK: 21 - 5 = 16 emas, 21 - 21 = 0 bo‘lyapti — sababi noto‘g‘ri manbadan olingan
+      const updatedLeft = Math.max(0, currentVacationLeft - dayCount);
+
+      await updateDoc(userRef, {
+        vacationLeft: updatedLeft
+      });
+
+      console.log(`✅ VacationLeft updated for ${vacationData.fullName}: ${updatedLeft}`);
+    }
+
+    loadEmployees();
+    loadVacationRequests();
+
+    // Modalni yopish
+    const modal = document.getElementById("vacationModal");
+    if (modal) {
+      modal.classList.add("hidden");
+    }
+
+  } catch (error) {
+    console.error("❌ Error handling vacation action:", error);
+  }
+}
+window.handleVacationAction = handleVacationAction;
 
 // Panelni nav orqali boshqarish (vacation panel ko‘rsatish)
 document.getElementById("navVacations").addEventListener("click", () => {
@@ -469,6 +591,27 @@ document.getElementById("navVacations").addEventListener("click", () => {
   document.getElementById("vacationRequestsSection").classList.remove("hidden");
   loadVacationRequests();
 });
+
+async function loadApprovedVacations() {
+  const q = query(collection(db, "vacationRequests"), where("status", "==", "Approved"));
+  const snapshot = await getDocs(q);
+  const vacationsByUser = {};
+
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    const uid = data.uid;
+    const from = data.startDate;
+    const to = data.endDate;
+
+    if (!vacationsByUser[uid]) {
+      vacationsByUser[uid] = [];
+    }
+
+    vacationsByUser[uid].push({ from, to });
+  });
+
+  return vacationsByUser;
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   const openModalBtn = document.getElementById("openAddEmployeeModal");
@@ -480,9 +623,3 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 });
-
-
-
-/** Initial load **/
-generateMonths();
-loadEmployees();

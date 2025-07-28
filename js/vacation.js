@@ -40,7 +40,7 @@ form.addEventListener("submit", async e => {
             startDate,
             endDate,
             status: "Pending",
-            createdAt: serverTimestamp(), // bu yer muhim!
+            createdAt: serverTimestamp(), // bu yer muhim!,
         });
 
         message.textContent = "Request submitted successfully.";
