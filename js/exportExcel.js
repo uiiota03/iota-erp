@@ -9,27 +9,68 @@ function formatMonth(date) {
 }
 
 function parseAttendance(value) {
-    if (!value || typeof value !== "string") return { status: "-", checkIn: null };
-    const [status, checkIn] = value.split("@");
+    if (!value || typeof value !== "string") return { status: "-", checkIn: null, extraHours: null, leaveTime: null };
+    const parts = value.split("@");
+    if (parts[0] === "O") {
+        return {
+            status: "+", // Overtime kelgan sifatida ko'rsatiladi
+            checkIn: parts[1] || null,
+            extraHours: parts[2] ? Number(parts[2]) : 0,
+            leaveTime: null
+        };
+    } else if (parts[0] === "E") {
+        return {
+            status: "+", // Erta chiqish kelgan sifatida ko'rsatiladi
+            checkIn: null,
+            extraHours: null,
+            leaveTime: parts[1] || null
+        };
+    } else if (parts[0] === "V") {
+        return {
+            status: "V", // Ta'til
+            checkIn: null,
+            extraHours: null,
+            leaveTime: null
+        };
+    }
     return {
-        status: status || "-",
-        checkIn: checkIn || null
+        status: parts[0] || "-",
+        checkIn: parts[1] || null,
+        extraHours: null,
+        leaveTime: null
     };
 }
 
-function calculateWorkedHours(checkInStr) {
-    if (!checkInStr) return 0;
-    const [hours, minutes] = checkInStr.split(":").map(Number);
-    const checkInTime = new Date();
-    checkInTime.setHours(hours, minutes, 0, 0);
+function calculateWorkedHours(attendance, year, month, day) {
+    const { status, checkIn, extraHours, leaveTime } = attendance;
+    if (status !== "+" || (!checkIn && !leaveTime)) return 0;
 
-    const endTime = new Date();
-    endTime.setHours(17, 0, 0, 0); // 17:00 is end of workday
+    let hoursWorked = 0;
+    if (checkIn) {
+        const [hours, minutes] = checkIn.split(":").map(Number);
+        const checkInTime = new Date(year, month - 1, day, hours, minutes);
+        const eightTen = new Date(year, month - 1, day, 8, 10);
+        const endOfDay = new Date(year, month - 1, day, 17, 0);
 
-    const diffMs = endTime - checkInTime;
-    if (diffMs <= 0) return 0;
+        if (checkInTime <= eightTen) {
+            hoursWorked = 8; // 08:10 dan oldin kelgan bo'lsa, 8 soat
+        } else {
+            const diffMs = endOfDay - checkInTime;
+            hoursWorked = Math.max(0, diffMs / (1000 * 60 * 60)); // Kirishdan 17:00 gacha
+        }
 
-    return +(diffMs / (1000 * 60 * 60)).toFixed(2); // round to 2 decimals
+        if (extraHours) {
+            hoursWorked += extraHours; // Overtime soatlarni qo'shish
+        }
+    } else if (leaveTime) {
+        const [hours, minutes] = leaveTime.split(":").map(Number);
+        const leaveTimeDate = new Date(year, month - 1, day, hours, minutes);
+        const startOfDay = new Date(year, month - 1, day, 8, 0);
+        const diffMs = leaveTimeDate - startOfDay;
+        hoursWorked = Math.max(0, diffMs / (1000 * 60 * 60)); // 08:00 dan chiqish vaqtigacha
+    }
+
+    return +hoursWorked.toFixed(2); // 2 xonagacha yaxlitlash
 }
 
 // Statik bayram kunlari ro'yxati (O'zbekiston bayramlari)
@@ -47,13 +88,13 @@ export async function exportAttendanceToExcel(monthStr, employeesObj, attendance
     if (!employeesObj || typeof employeesObj !== 'object') return;
 
     const employees = Object.values(employeesObj);
-    employees.sort((a, b) => a.position.localeCompare(b.position));
+    employees.sort((a, b) => a.position?.localeCompare(b.position) || 0);
 
     const wb = utils.book_new();
     const wsData = [];
 
-    const [year, month] = monthStr.split("-");
-    const daysInMonth = new Date(+year, +month, 0).getDate();
+    const [year, month] = monthStr.split("-").map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
     const formattedMonth = formatMonth(new Date(`${monthStr}-01`));
 
     // Header part
@@ -90,16 +131,24 @@ export async function exportAttendanceToExcel(monthStr, employeesObj, attendance
         for (let d = 1; d <= daysInMonth; d++) {
             const dayStr = `${monthStr}-${d.toString().padStart(2, "0")}`;
             const raw = attendanceData?.[emp.uid]?.[dayStr] || "";
-            const { status, checkIn } = parseAttendance(raw);
+            const attendance = parseAttendance(raw);
+            const hoursWorked = calculateWorkedHours(attendance, year, month, d);
+            const date = new Date(year, month - 1, d);
+            const isWeekend = [0, 6].includes(date.getDay());
+            const isHoliday = holidays[dayStr];
 
-            let hoursWorked = 0;
-            if (status === "+" && checkIn) {
-                hoursWorked = calculateWorkedHours(checkIn);
+            if (attendance.status === "+" && hoursWorked > 0) {
                 totalDays++;
                 totalHours += hoursWorked;
                 row.push(hoursWorked);
+            } else if (attendance.status === "V") {
+                row.push("V"); // Ta'til
+            } else if (isWeekend) {
+                row.push("W"); // Dam olish kuni
+            } else if (isHoliday) {
+                row.push("B"); // Bayram kuni
             } else {
-                row.push(0); // Mark as absent or undefined
+                row.push("-"); // Kelmagan
             }
         }
 
@@ -125,20 +174,29 @@ export async function exportAttendanceToExcel(monthStr, employeesObj, attendance
             const date = new Date(dateStr);
             const isWeekend = [0, 6].includes(date.getDay());
             const isHoliday = holidays[dateStr];
-            const val = parseFloat(cell.v);
+            const raw = attendanceData?.[employees[R - 4]?.uid]?.[dateStr] || "";
+            const attendance = parseAttendance(raw);
 
             cell.s = {
                 fill: {
                     fgColor: {
                         rgb: isHoliday
                             ? "FFD700" // Sariq rang bayram kunlari uchun
-                            : val > 0
-                                ? (isWeekend ? "ADD8E6" : "90EE90") // blue / green
-                                : (isWeekend ? "FFC0CB" : "FF7F7F") // pink / red
+                            : attendance.status === "V"
+                                ? "FFD700" // Ta'til
+                                : attendance.status === "+" && attendance.extraHours
+                                    ? "ADD8E6" // Ko'k rang overtime uchun
+                                    : attendance.status === "+" && attendance.leaveTime
+                                        ? "FED7AA" // Sariq rang erta chiqish uchun
+                                        : attendance.status === "+" && !isWeekend
+                                            ? "90EE90" // Yashil rang oddiy kelish uchun
+                                            : isWeekend
+                                                ? "D3D3D3" // Kulrang dam olish kunlari uchun
+                                                : "FF7F7F" // Qizil kelmagan kunlar uchun
                     }
                 },
                 alignment: { horizontal: "center" },
-                numFmt: "0.00"
+                numFmt: attendance.status === "V" ? "" : "0.00"
             };
         }
     }
