@@ -12,9 +12,30 @@ import {
   doc,
   updateDoc,
   query,
-  where
+  where,
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 import { auth, db } from "./firebase-config.js";
+
+import { exportAttendanceToExcel } from "./exportExcel.js";
+
+// Tugma bosilganda:
+document.getElementById("exportExcelBtn").addEventListener("click", async () => {
+  const monthStr = document.getElementById("month-select").value;
+  const employees = globalEmployees; // Sizda globalda saqlangan
+  const attendanceDocSnap = await getDoc(doc(db, "attendance", monthStr));
+  const attendanceData = attendanceDocSnap.exists() ? attendanceDocSnap.data() : {};
+
+  exportAttendanceToExcel(monthStr, employees, attendanceData);
+});
+
+import { exportAttendanceToHTML } from './exportAttendence.js';
+document.getElementById("exportWebBtn").addEventListener("click", async () => {
+    const monthStr = document.getElementById("month-select").value;
+    const employees = globalEmployees;
+    const attendanceDocSnap = await getDoc(doc(db, "attendance", monthStr));
+    const attendanceData = attendanceDocSnap.exists() ? attendanceDocSnap.data() : {};
+    exportAttendanceToHTML(monthStr, employees, attendanceData);
+});
 
 onAuthStateChanged(auth, (user) => {
   if (!user) {
@@ -55,14 +76,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
-
-// Util function: calculate difference between 2 dates in days
-function getDaysDiff(start, end) {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  const diffTime = endDate.getTime() - startDate.getTime();
-  return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-}
+// // Util function: calculate difference between 2 dates in days
+// function getDaysDiff(start, end) {
+//   const startDate = new Date(start);
+//   const endDate = new Date(end);
+//   const diffTime = endDate.getTime() - startDate.getTime();
+//   return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+// }
 
 function formatDate(dateObj) {
   const y = dateObj.getFullYear();
@@ -123,13 +143,30 @@ async function saveAttendance(uid, day, status) {
 }
 
 async function drawTabel(monthStr, employees) {
+  // Faqat "employee" bo'lganlarni olish
+  employees = employees.filter(emp => {
+    const role = (emp.position || "").toLowerCase();
+    return role !== "it specialist";
+  });
+
+  // Lavozim bo‘yicha tartiblash
+  employees.sort((a, b) => {
+    const getPriority = (position) => {
+      if (!position || position.trim() === "") return 0;
+      if (position.toLowerCase() === "master") return 1;
+      if (position.toLowerCase() === "specialist") return 2;
+      return 0;
+    };
+    return getPriority(a.position) - getPriority(b.position);
+  });
+
   tabelHeader.innerHTML = `
     <th class="border border-gray-300 bg-white px-2 py-1">#</th>
-    <th class="border border-gray-300 bg-white px-2 py-1">Ism</th>
-    <th class="border border-gray-300 bg-white px-2 py-1">Familiya</th>
-    <th class="border border-gray-300 bg-white px-2 py-1 text-green-700">Kelgan</th>
-    <th class="border border-gray-300 bg-white px-2 py-1 text-red-600">Kelmagan</th>
-    <th class="border border-gray-300 bg-white px-2 py-1">Vaqt</th>
+    <th class="border border-gray-300 bg-white px-2 py-1">First Name</th>
+    <th class="border border-gray-300 bg-white px-2 py-1">Last Name</th>
+    <th class="border border-gray-300 bg-white px-2 py-1 text-green-700">Attendent</th>
+    <th class="border border-gray-300 bg-white px-2 py-1 text-red-600">Absent</th>
+    <th class="border border-gray-300 bg-white px-2 py-1">Total hour</th>
   `;
 
   tabelBody.innerHTML = "";
@@ -138,11 +175,10 @@ async function drawTabel(monthStr, employees) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const attendanceData = await loadAttendanceData(monthStr);
   const vacationData = await loadApprovedVacations();
-  const userVacations = vacationData?.[employees.uid] || [];
   const today = new Date();
   const todayStr = formatDate(today);
 
-  // === Header kunlar ===
+  // Header kunlar
   for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(year, month - 1, day);
     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -150,7 +186,7 @@ async function drawTabel(monthStr, employees) {
 
     const th = document.createElement("th");
     th.className = "border border-gray-300 px-2 py-1 text-xs text-center";
-    th.innerHTML = `${day}<br><span class="text-gray-400 text-[10px]">${["Yak", "Du", "Se", "Ch", "Pa", "Ju", "Sh"][date.getDay()]}</span>`;
+    th.innerHTML = `${day}<br><span class="text-gray-400 text-[10px]">${["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][date.getDay()]}</span>`;
     tabelHeader.appendChild(th);
   }
 
@@ -180,34 +216,42 @@ async function drawTabel(monthStr, employees) {
 
       const cell = document.createElement("td");
       cell.className = "border border-gray-300 px-2 py-1 text-center text-sm";
-      cell.contentEditable = true;
+      cell.contentEditable = !isFuture;
       cell.id = `day-${dateStr}`;
       cell.dataset.uid = emp.uid;
       cell.dataset.day = dateStr;
 
-      // 1. Attendance status
+      // Attendance status
       let status = attendanceData?.[emp.uid]?.[dateStr] || "";
-      if (status.includes("@")) status = status.split("@")[0];
-
-      // 1. Vacation check
-      const userVacations = vacationData[emp.uid] || [];
-      const isOnVacation = userVacations.some(vac => dateStr >= vac.from && dateStr <= vac.to);
-      console.log("userVacations :", userVacations);
-      console.log("isOnVacation :", isOnVacation);
-
-      // 2. Determine display status
-      if (!status && isOnVacation) {
-        status = "V";
+      let displayStatus = status;
+      if (status.includes("@")) {
+        displayStatus = status.startsWith("O") || status.startsWith("E") ? "+" : status.split("@")[0];
       }
 
-      cell.textContent = status;
+      // Vacation check
+      const userVacations = vacationData?.[emp.uid] || [];
+      const isOnVacation = userVacations.some(vac => dateStr >= vac.from && dateStr <= vac.to);
 
+      if (!status && isOnVacation) {
+        displayStatus = "V";
+        status = "V";
+      } else if (!status && !isOnVacation && !isWeekend && !isFuture) {
+        absent++;
+      }
+
+      cell.textContent = displayStatus;
+
+      // Stilize qilish
       if (status === "V") {
         cell.classList.add("bg-yellow-50", "text-yellow-600", "font-medium");
-      } else if (status === "+") {
-        cell.classList.add("bg-green-50", "text-green-700", "font-medium");
+      } else if (status.startsWith("+") || status.startsWith("O") || status.startsWith("E")) {
+        cell.classList.add(
+          status.startsWith("O") ? "bg-blue-100" : status.startsWith("E") ? "bg-orange-100" : "bg-green-50",
+          status.startsWith("O") ? "text-blue-700" : status.startsWith("E") ? "text-orange-700" : "text-green-700",
+          "font-medium"
+        );
         present++;
-      } else if (status === "-") {
+      } else if (status.startsWith("-")) {
         cell.classList.add("bg-red-50", "text-red-600", "font-medium");
         absent++;
       } else if (isWeekend) {
@@ -222,13 +266,26 @@ async function drawTabel(monthStr, employees) {
 
       // Save handler
       cell.addEventListener("blur", async () => {
-        const newStatus = cell.textContent.trim();
+        if (isFuture) return;
+        let newStatus = cell.textContent.trim();
         let valueToSave = newStatus;
 
-        if (newStatus === "+") {
+        if (newStatus === "+" || newStatus === "O") {
           const now = new Date();
           const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-          valueToSave = `+@${timeStr}`;
+          if (newStatus === "O") {
+            const overtimeHours = prompt("Overtime soatlarini kiriting (masalan, 2):", "0") || "0";
+            valueToSave = `O@${timeStr}@${overtimeHours}`;
+          } else {
+            valueToSave = `+@${timeStr}`;
+          }
+        } else if (newStatus === "E") {
+          const leaveTime = prompt("Chiqish vaqtini kiriting (HH:MM, masalan, 15:00):", "17:00") || "17:00";
+          valueToSave = `E@${leaveTime}`;
+        } else if (newStatus === "-") {
+          valueToSave = "-";
+        } else if (newStatus === "") {
+          valueToSave = "";
         }
 
         await saveAttendance(emp.uid, dateStr, valueToSave);
@@ -239,33 +296,51 @@ async function drawTabel(monthStr, employees) {
       tr.appendChild(cell);
     }
 
-    // === Working hours calculation ===
+    // Working hours calculation
     let totalMinutesWorked = 0;
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
       const rawStatus = attendanceData?.[emp.uid]?.[dateStr] || "";
+      
       if (rawStatus.startsWith("+@")) {
         const timeStr = rawStatus.split("@")[1];
         let [hour, min] = timeStr.split(":").map(Number);
         let checkIn = new Date(year, month - 1, day, hour, min);
         const endOfDay = new Date(year, month - 1, day, 17, 0);
-
-        // Agar 8:10 dan oldin bo‘lsa → 8:00 hisoblanadi
         const eightTen = new Date(year, month - 1, day, 8, 10);
         if (checkIn <= eightTen) {
-          totalMinutesWorked += 8 * 60;
+          totalMinutesWorked += 8 * 60; // 8 soat
         } else {
-          const diff = Math.max(0, (endOfDay - checkIn) / 60000); // in minutes
+          const diff = Math.max(0, (endOfDay - checkIn) / 60000); // Kirishdan 17:00 gacha
           totalMinutesWorked += diff;
         }
+      } else if (rawStatus.startsWith("O@")) {
+        const [, timeStr, overtimeHours] = rawStatus.split("@");
+        let [hour, min] = timeStr.split(":").map(Number);
+        let checkIn = new Date(year, month - 1, day, hour, min);
+        const eightTen = new Date(year, month - 1, day, 8, 10);
+        const endOfDay = new Date(year, month - 1, day, 17, 0);
+        let baseMinutes = 0;
+        if (checkIn <= eightTen) {
+          baseMinutes = 8 * 60; // 8 soat
+        } else {
+          baseMinutes = Math.max(0, (endOfDay - checkIn) / 60000); // Kirishdan 17:00 gacha
+        }
+        totalMinutesWorked += baseMinutes + (Number(overtimeHours) || 0) * 60; // Overtime soatlarni qo'shish
+      } else if (rawStatus.startsWith("E@")) {
+        const [, timeStr] = rawStatus.split("@");
+        let [hour, min] = timeStr.split(":").map(Number);
+        let leaveTime = new Date(year, month - 1, day, hour, min);
+        const startOfDay = new Date(year, month - 1, day, 8, 0);
+        const diff = Math.max(0, (leaveTime - startOfDay) / 60000); // 08:00 dan chiqish vaqtigacha
+        totalMinutesWorked += diff;
       }
     }
 
     const workedHours = Math.floor(totalMinutesWorked / 60);
     const workedMinutes = totalMinutesWorked % 60;
-
     const timeTd = tr.querySelector("td:nth-child(6)");
-    timeTd.textContent = `${workedHours} soat ${workedMinutes} daqiqa`;
+    timeTd.textContent = `${workedHours}h${workedMinutes}m`;
 
     tabelBody.appendChild(tr);
     document.getElementById(`present-${emp.uid}`).textContent = present;
@@ -411,7 +486,7 @@ form.addEventListener("submit", async (e) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     console.log(user);
-    
+
     await setDoc(doc(db, "users", user.uid), {
       uid: user.uid,
       firstName,

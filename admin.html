@@ -27,7 +27,7 @@
 
 </head>
 
-<body class="bg-gray-100 h-screen overflow-hidden">
+<body class="bg-gray-100 min-h-screen">
   <!-- Navbar -->
   <!-- Navbar -->
   <header class="bg-white shadow fixed w-full top-0 left-0 z-10">
@@ -59,7 +59,7 @@
     </aside>
 
     <!-- Main Content -->
-    <main class="ml-0 md:ml-64 p-6 space-y-10 w-full overflow-y-auto h-[calc(100vh-5rem)]">
+    <main class="ml-0 md:ml-64 p-6 space-y-10 w-full overflow-auto">
       <!-- Employees Section -->
       <section id="employeesSection">
         <div class="flex justify-between items-center mb-4">
@@ -88,6 +88,12 @@
       <!-- Attendance Section -->
       <section id="attendanceSection" class="hidden">
         <div class="mb-4">
+          <button id="exportExcelBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+            Download Excel File
+          </button>
+          <button id="exportWebBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+            Open via Web format
+          </button>
           <label for="month-select" class="mr-2 font-semibold">Select Month:</label>
           <select id="month-select" class="border px-3 py-2 rounded"></select>
         </div>
