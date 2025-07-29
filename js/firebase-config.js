@@ -6,13 +6,13 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth
 
 // Firebase konfiguratsiyasi
 const firebaseConfig = {
-  apiKey: "AIzaSyDSI8Q9GNSxnwwLms4bKdpPGmP2Sjsi5RU",
-  authDomain: "iota-erp.firebaseapp.com",
-  projectId: "iota-erp",
-  storageBucket: "iota-erp.appspot.com",  // bu yerda `.firebasestorage.app` emas!
-  messagingSenderId: "249498348698",
-  appId: "1:249498348698:web:4dc1017937dba1159c0323",
-  measurementId: "G-RCV3G122BW"
+  apiKey: "AIzaSyAb4y4wwEjaqKpyFFKIZ1QEBlFSmavtwjY",
+  authDomain: "iota-erp-12499.firebaseapp.com",
+  projectId: "iota-erp-12499",
+  storageBucket: "iota-erp-12499.appspot.app",
+  messagingSenderId: "494265687137",
+  appId: "1:494265687137:web:923f2b07bf4ab2e316de20",
+  measurementId: "G-MJN1YLGM7M"
 };
 
 // Firebase’ni ishga tushirish

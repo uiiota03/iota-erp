@@ -410,12 +410,13 @@ form.addEventListener("submit", async (e) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
-
+    console.log(user);
+    
     await setDoc(doc(db, "users", user.uid), {
       uid: user.uid,
       firstName,
       lastName,
-      email,
+      email: user.email,
       position,
       startDate,
       role: "employee",

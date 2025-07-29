@@ -285,7 +285,7 @@ async function updateCheckInState(uid) {
         checkInBtn.classList.remove("bg-blue-500"); // asl rangdan tozalash
     } else {
         // 👇 Check-in qilmagan bo‘lsa, ammo vaqt 08:10 dan o‘tgan bo‘lsa tugmani block qilamiz
-        if (hour > 8 || (hour === 8 && minute > 10)) {
+        if (hour > 17) {
             checkInBtn.textContent = "Check-in vaqti tugagan";
             checkInBtn.disabled = true;
             checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
