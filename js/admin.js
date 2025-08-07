@@ -30,11 +30,11 @@ document.getElementById("exportExcelBtn").addEventListener("click", async () => 
 
 import { exportAttendanceToHTML } from './exportAttendence.js';
 document.getElementById("exportWebBtn").addEventListener("click", async () => {
-    const monthStr = document.getElementById("month-select").value;
-    const employees = globalEmployees;
-    const attendanceDocSnap = await getDoc(doc(db, "attendance", monthStr));
-    const attendanceData = attendanceDocSnap.exists() ? attendanceDocSnap.data() : {};
-    exportAttendanceToHTML(monthStr, employees, attendanceData);
+  const monthStr = document.getElementById("month-select").value;
+  const employees = globalEmployees;
+  const attendanceDocSnap = await getDoc(doc(db, "attendance", monthStr));
+  const attendanceData = attendanceDocSnap.exists() ? attendanceDocSnap.data() : {};
+  exportAttendanceToHTML(monthStr, employees, attendanceData);
 });
 
 onAuthStateChanged(auth, (user) => {
@@ -301,7 +301,7 @@ async function drawTabel(monthStr, employees) {
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
       const rawStatus = attendanceData?.[emp.uid]?.[dateStr] || "";
-      
+
       if (rawStatus.startsWith("+@")) {
         const timeStr = rawStatus.split("@")[1];
         let [hour, min] = timeStr.split(":").map(Number);
@@ -566,7 +566,7 @@ document.addEventListener("DOMContentLoaded", () => {
     employeesSection.classList.add("hidden");
     attendanceSection.classList.add("hidden");
     vacationRequestsSection.classList.add("hidden");
-
+    document.getElementById("dayOffSection").classList.add("hidden");
     section.classList.remove("hidden");
   }
 
@@ -692,8 +692,44 @@ window.handleVacationAction = handleVacationAction;
 document.getElementById("navVacations").addEventListener("click", () => {
   document.getElementById("employeesSection").classList.add("hidden");
   document.getElementById("attendanceSection").classList.add("hidden");
+  document.getElementById("dayOffSection").classList.add("hidden");
   document.getElementById("vacationRequestsSection").classList.remove("hidden");
   loadVacationRequests();
+});
+
+async function loadDayOffs() {
+  const dayOffBody = document.getElementById("dayOffTableBody");
+  dayOffBody.innerHTML = ""; // Clear old rows
+
+  const q = query(collection(db, "absenceReasons")); // absence collection
+  const querySnapshot = await getDocs(q);
+
+  for (const docSnap of querySnapshot.docs) {
+    const data = docSnap.data();
+
+    const userSnap = await getDoc(doc(db, "users", data.uid));
+    const userData = userSnap.exists() ? userSnap.data() : {};
+
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td class="p-2 border">${userData.firstName || ""} ${userData.lastName || ""}</td>
+      <td class="p-2 border">${data.date || "-"}</td>
+      <td class="p-2 border">${data.reason || "-"}</td>
+      <td class="p-2 border">${data.untilDate || "-"}</td>
+      <td class="p-2 border">${data.isMedical ? "✅" : "❌"}</td>
+    `;
+
+    dayOffBody.appendChild(tr);
+  }
+}
+
+document.getElementById("navDayOff").addEventListener("click", () => {
+  document.getElementById("employeesSection").classList.add("hidden");
+  document.getElementById("attendanceSection").classList.add("hidden");
+  document.getElementById("vacationRequestsSection").classList.add("hidden");
+  document.getElementById("dayOffSection").classList.remove("hidden");
+  loadDayOffs();
 });
 
 async function loadApprovedVacations() {

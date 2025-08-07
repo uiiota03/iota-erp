@@ -41,6 +41,7 @@
         <div id="attendanceSection">
           <div class="mb-4 flex flex-wrap items-center justify-between">
             <button id="checkInBtn" class="px-4 py-2 border rounded mb-4">Check in</button>
+            <button id="absenceBtn" class="bg-pink-300 text-black border px-4 py-2 rounded">Day off ?</button>
             <div class="flex items-center gap-2">
               <label for="monthSelect">Month:</label>
               <select id="monthSelect" class="border px-2 py-1 rounded"></select>
@@ -107,6 +108,29 @@
   <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white shadow flex justify-around py-2">
     <button id="navAttendanceMobile" class="text-blue-600">Attendance</button>
     <button id="navVacationMobile" class="text-gray-600">Vacation</button>
+  </div>
+
+  <!-- HTML faylingizga quyidagilarni joylang -->
+  <div id="absenceModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden z-50">
+    <div class="bg-white p-6 rounded shadow-md w-96">
+      <h2 class="text-lg font-semibold mb-4">Ishga chiqaolmaslik haqida</h2>
+      <label class="block mb-2">
+        Sabab:
+        <textarea id="absenceReason" class="w-full border px-2 py-1 rounded" rows="2"></textarea>
+      </label>
+      <label class="block mb-2">
+        Qachongacha yo‘qlik (optional):
+        <input type="date" id="absenceUntil" class="w-full border px-2 py-1 rounded" />
+      </label>
+      <label class="block mb-4">
+        <input type="checkbox" id="isMedical" class="mr-2" />
+        Bu tibbiy sabab (balnichniy)
+      </label>
+      <div class="flex justify-end space-x-2">
+        <button id="cancelAbsenceBtn" class="px-4 py-1 bg-gray-400 text-white rounded">Bekor</button>
+        <button id="submitAbsenceBtn" class="px-4 py-1 bg-yellow-500 text-white rounded">Yuborish</button>
+      </div>
+    </div>
   </div>
 
   <script>

@@ -55,6 +55,7 @@
         <button id="navEmployees" class="w-full text-left px-4 py-2 hover:bg-gray-100">Employees</button>
         <button id="navAttendance" class="w-full text-left px-4 py-2 hover:bg-gray-100">Attendance</button>
         <button id="navVacations" class="w-full text-left px-4 py-2 hover:bg-gray-100">Vacation Requests</button>
+        <button id="navDayOff" class="w-full text-left px-4 py-2 hover:bg-gray-100">Day off Requests</button>
       </nav>
     </aside>
 
@@ -136,6 +137,25 @@
           </table>
         </div>
       </section>
+
+      <div id="dayOffSection" class="mt-10 hidden">
+        <h2 class="text-xl font-bold mb-4">Day Off (Kela olmaganlar)</h2>
+        <table class="w-full border text-sm text-left">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="p-2 border">First & Last Name</th>
+              <th class="p-2 border">Date</th>
+              <th class="p-2 border">Reason</th>
+              <th class="p-2 border">Until Date</th>
+              <th class="p-2 border">This is a mediacal resason?</th>
+            </tr>
+          </thead>
+          <tbody id="dayOffTableBody" class="bg-white">
+            <!-- Dynamic rows here -->
+          </tbody>
+        </table>
+      </div>
+
     </main>
   </div>
 

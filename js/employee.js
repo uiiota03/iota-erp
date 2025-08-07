@@ -1,4 +1,3 @@
-// employee.js
 import { auth, db } from "./firebase-config.js";
 import {
     onAuthStateChanged,
@@ -15,7 +14,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 // Constants
-const OFFICE_LOCATION = { lat: 41.430552, lng: 69.531879 }; // Exact office location (based on your Google Maps link)
+const OFFICE_LOCATION = { lat: 41.430552, lng: 69.531879 }; // Exact office location
 const MAX_DISTANCE_KM = 0.5; // 500 meters allowed radius
 
 // DOM Elements
@@ -27,6 +26,7 @@ const logoutBtn = document.getElementById("logoutBtn");
 const calendar = document.getElementById("calendar");
 const monthSelect = document.getElementById("monthSelect");
 const currentMonthLabel = document.getElementById("currentMonthLabel");
+const absenceBtn = document.getElementById("absenceBtn"); // Yangi tugma
 
 // Utility
 function getTodayString() {
@@ -37,18 +37,17 @@ function getTodayString() {
     return `${y}-${m}-${d}`;
 }
 
-
 function getMonthString(date) {
     return date.toISOString().slice(0, 7);
 }
 
-function isWeekend(date) {
-    const day = date.getDay();
-    return day === 0 || day === 6; // Sunday or Saturday
-}
+// function isWeekend(date) {
+//     const day = date.getDay();
+//     return day === 0 || day === 6;
+// }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371; // Radius of the earth in km
+    const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
@@ -57,7 +56,83 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
         Math.cos((lat2 * Math.PI) / 180) *
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance in km
+    return R * c;
+}
+
+// Yangi funksiya: Kela olmaganlikni bildirish
+function showAbsenceModal() {
+    document.getElementById("absenceModal").classList.remove("hidden");
+}
+
+function hideAbsenceModal() {
+    document.getElementById("absenceModal").classList.add("hidden");
+}
+
+async function reportAbsenceModal(uid) {
+    showAbsenceModal();
+
+    const submitBtn = document.getElementById("submitAbsenceBtn");
+    const cancelBtn = document.getElementById("cancelAbsenceBtn");
+
+    const handleSubmit = async () => {
+        const reason = document.getElementById("absenceReason").value.trim();
+        const untilDate = document.getElementById("absenceUntil").value;
+        const isMedical = document.getElementById("isMedical").checked;
+
+        if (!reason) {
+            alert("⚠️ Sababni kiriting.");
+            return;
+        }
+
+        const today = getTodayString();
+        const monthStr = today.slice(0, 7);
+        const docRef = doc(db, "attendance", monthStr);
+        const absenceDocRef = doc(db, "absenceReasons", `${uid}_${today}`);
+
+        const snap = await getDoc(docRef);
+        let data = snap.exists() ? snap.data() : {};
+        if (!data[uid]) data[uid] = {};
+        data[uid][today] = "-";
+
+        await setDoc(absenceDocRef, {
+            uid,
+            date: today,
+            reason,
+            untilDate: untilDate || null,
+            isMedical,
+            timestamp: new Date()
+        });
+
+        await setDoc(docRef, data);
+
+        alert("✅ Kela olmaslik sababi saqlandi.");
+
+        // Tugmalarni o‘chirish
+        absenceBtn.disabled = true;
+        absenceBtn.textContent = "Qayd etildi";
+        absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+
+        checkInBtn.disabled = true;
+        checkInBtn.textContent = "Check-in yopilgan";
+        checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
+
+        await loadAttendance(uid, monthStr);
+        await updateCheckInState(uid);
+
+        hideAbsenceModal();
+        removeListeners(); // oldingi listenerlarni olib tashlash
+    };
+
+    const removeListeners = () => {
+        submitBtn.removeEventListener("click", handleSubmit);
+        cancelBtn.removeEventListener("click", hideAbsenceModal);
+    };
+
+    submitBtn.addEventListener("click", handleSubmit);
+    cancelBtn.addEventListener("click", () => {
+        hideAbsenceModal();
+        removeListeners();
+    });
 }
 
 // Check-In handler
@@ -74,27 +149,24 @@ async function checkIn(uid) {
 
     if (!data[uid]) data[uid] = {};
 
-    // 🔴 17:00 dan kech — "-" belgilaymiz, tugmani o‘chiramiz
     if (hour >= 17) {
         alert("⚠️ Soat 17:00 dan kech bo‘ldi. Siz ishga kelmagan deb belgilandingiz.");
-        data[uid][today] = "-"; // ❌ kelmadi deb belgilash
+        data[uid][today] = "-";
         await setDoc(docRef, data);
 
         checkInBtn.disabled = true;
         checkInBtn.textContent = "Checked";
-        checkInBtn.classList.add("opacity-50", "cursor-not-allowed"); // ixtiyoriy vizual effekt
+        checkInBtn.classList.add("opacity-50", "cursor-not-allowed");
 
         loadAttendance(uid, monthStr);
         updateCheckInState(uid);
         return;
     }
 
-    // ⚠️ 08:10 dan kech — alert chiqadi, ammo davom etadi
     if (hour > 8 || (hour === 8 && minute > 10)) {
         alert("⚠️ Siz kechikdingiz, ammo check-in qabul qilindi.");
     }
 
-    // ✅ Geolocation tekshiruvi
     return new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(async (position) => {
             const { latitude, longitude } = position.coords;
@@ -110,14 +182,13 @@ async function checkIn(uid) {
                 return reject("Out of range");
             }
 
-            const timeStr = now.toTimeString().slice(0, 5); // "08:03"
-            data[uid][today] = `+@${timeStr}`; // ✅ saqlanadi
-
+            const timeStr = now.toTimeString().slice(0, 5);
+            data[uid][today] = `+@${timeStr}`;
             await setDoc(docRef, data);
 
             checkInBtn.disabled = true;
             checkInBtn.textContent = "Checked";
-            checkInBtn.classList.add("opacity-50", "cursor-not-allowed"); // ixtiyoriy
+            checkInBtn.classList.add("opacity-50", "cursor-not-allowed");
 
             loadAttendance(uid, monthStr);
             updateCheckInState(uid);
@@ -128,7 +199,6 @@ async function checkIn(uid) {
         });
     });
 }
-
 
 async function loadAttendance(uid, monthStr) {
     const [year, month] = monthStr.split("-").map(Number);
@@ -169,10 +239,9 @@ async function loadAttendance(uid, monthStr) {
 
         if (status?.startsWith("+")) {
             const timeStr = status.includes("@") ? status.split("@")[1] : null;
-
             if (timeStr) {
                 const [h, m] = timeStr.split(":").map(Number);
-                const isLate = h > 8 || (h === 8 && m > 10);
+                const isLate = h > 8 || (h === 8 && m > 20);
                 bgColor = isLate ? "bg-green-100 text-black" : "bg-green-500 text-white";
                 tooltip = isLate
                     ? `⏰ Kechikib keldi: ${timeStr}`
@@ -183,7 +252,10 @@ async function loadAttendance(uid, monthStr) {
             }
         } else if (status === "-") {
             bgColor = "bg-red-600 text-white";
-            tooltip = "❌ Kelmagan";
+            // Sababni Firestore'dan olish
+            const absenceDocRef = doc(db, "absenceReasons", `${uid}_${date}`);
+            const absenceSnap = await getDoc(absenceDocRef);
+            tooltip = absenceSnap.exists() ? `❌ Kelmagan: ${absenceSnap.data().reason}` : "❌ Kelmagan";
         } else if (isWeekend) {
             bgColor = "bg-yellow-200";
             tooltip = "🟡 Dam olish kuni";
@@ -195,8 +267,7 @@ async function loadAttendance(uid, monthStr) {
         cell.className = `p-2 rounded text-center ${bgColor}`;
         cell.textContent = d;
         cell.title = tooltip;
-        cell.id = `day-${date}`
-
+        cell.id = `day-${date}`;
         calendar.appendChild(cell);
     }
 }
@@ -208,7 +279,7 @@ function generateMonthOptions() {
 
     for (let month = 1; month < 13; month++) {
         const date = new Date(currentYear, month, 0);
-        const val = getMonthString(date); // format: yyyy-mm
+        const val = getMonthString(date);
 
         const opt = document.createElement("option");
         opt.value = val;
@@ -257,8 +328,6 @@ async function markApprovedVacationsOnCalendar() {
     }
 }
 
-
-// Auth state check
 async function updateCheckInState(uid) {
     const today = getTodayString();
     const monthStr = today.slice(0, 7);
@@ -267,10 +336,15 @@ async function updateCheckInState(uid) {
     const data = snap.exists() ? snap.data() : {};
     const status = data[uid]?.[today];
 
-    // ⏰ Vaqtni aniqlaymiz
     const now = new Date();
     const hour = now.getHours();
     const minute = now.getMinutes();
+
+    // Absence tugmasi har doim ko‘rinib turadi
+    absenceBtn.style.display = "block";
+    absenceBtn.textContent = "Day off";
+    absenceBtn.classList.remove("bg-red-400", "opacity-50", "cursor-not-allowed");
+    absenceBtn.classList.add("bg-orange-500");
 
     if (status && status.startsWith("+@")) {
         const timeStr = status.split("@")[1];
@@ -282,32 +356,48 @@ async function updateCheckInState(uid) {
             : `Checked In - ${timeStr}`;
         checkInBtn.disabled = true;
         checkInBtn.classList.add("opacity-50", "cursor-not-allowed", isLate ? "bg-yellow-400" : "bg-green-500");
-        checkInBtn.classList.remove("bg-blue-500"); // asl rangdan tozalash
+        checkInBtn.classList.remove("bg-blue-500");
+
+        // Absence tugmasini o‘chirib qo‘yamiz
+        absenceBtn.disabled = true;
+        absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+    } else if (status === "-" || status === "absent" || status.startsWith("-@")) {
+        checkInBtn.textContent = "Check-in yopilgan (kelmagan)";
+        checkInBtn.disabled = true;
+        checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
+        checkInBtn.classList.remove("bg-blue-500");
+
+        absenceBtn.disabled = true;
+        absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+        absenceBtn.textContent = "Qayd etildi";
     } else {
-        // 👇 Check-in qilmagan bo‘lsa, ammo vaqt 08:10 dan o‘tgan bo‘lsa tugmani block qilamiz
-        if (hour > 17) {
-            checkInBtn.textContent = "Check-in vaqti tugagan";
+        if (hour >= 17) {
+            checkInBtn.textContent = "Check-in yopilgan (kech bo‘ldi)";
             checkInBtn.disabled = true;
             checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
             checkInBtn.classList.remove("bg-blue-500");
+
+            absenceBtn.disabled = true;
+            absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
         } else {
             checkInBtn.textContent = "Check In";
             checkInBtn.disabled = false;
             checkInBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-red-400", "bg-yellow-400", "bg-green-500");
             checkInBtn.classList.add("bg-blue-500");
+
+            absenceBtn.disabled = false;
+            absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
         }
     }
 }
 
-// 🔐 Foydalanuvchi holatini kuzatamiz
+// Auth state check
 onAuthStateChanged(auth, async (user) => {
     if (!user) {
-        // ❌ Login qilinmagan foydalanuvchi
         localStorage.removeItem("userData");
         return (window.location.href = "index.html");
     }
 
-    // 🔍 Firestore'dan userni tekshiramiz
     const userRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userRef);
 
@@ -318,37 +408,37 @@ onAuthStateChanged(auth, async (user) => {
         return (window.location.href = "index.html");
     }
 
-    // ✅ User ma’lumotlari mavjud
     const userData = userSnap.data();
     localStorage.setItem("userData", JSON.stringify(userData));
 
-    // 👤 UI ma’lumotlarini chiqaramiz
     nameEl.textContent = `${userData.firstName} ${userData.lastName}`;
     roleEl.textContent = userData.position;
     startDateEl.textContent = userData.startDate;
 
-    // 📅 Dropdownga oylik variantlarni qo‘shamiz
     generateMonthOptions();
 
     const thisMonth = getMonthString(new Date());
     currentMonthLabel.textContent = thisMonth;
     await loadAttendance(user.uid, thisMonth);
     await markApprovedVacationsOnCalendar();
-    await updateCheckInState(user.uid); // sahifa yuklanganda tugmani tekshiramiz
+    await updateCheckInState(user.uid);
 
-    // ✅ Tugma bosilganda
     checkInBtn.addEventListener("click", async () => {
         await checkIn(user.uid);
         await updateCheckInState(user.uid);
     });
 
-    // 🚪 Logout
+    // Yangi tugma uchun event listener
+    absenceBtn.addEventListener("click", async () => {
+        await reportAbsenceModal(user.uid); // Yangi modal funksiyani chaqiramiz
+        await updateCheckInState(user.uid); // Modal yopilgandan keyin state yangilanadi
+    });
+
     logoutBtn.addEventListener("click", () => {
         localStorage.removeItem("userData");
         signOut(auth);
     });
 
-    // 📅 Oyni almashtirish
     monthSelect.addEventListener("change", async () => {
         const selectedMonth = monthSelect.value;
         currentMonthLabel.textContent = selectedMonth;
