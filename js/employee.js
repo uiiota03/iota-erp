@@ -334,13 +334,13 @@ async function updateCheckInState(uid) {
     const docRef = doc(db, "attendance", monthStr);
     const snap = await getDoc(docRef);
     const data = snap.exists() ? snap.data() : {};
-    const status = data[uid]?.[today];
+    const status = data[uid]?.[today] || null; // Use null as a fallback if status is undefined
 
     const now = new Date();
     const hour = now.getHours();
     const minute = now.getMinutes();
 
-    // Absence tugmasi har doim ko‘rinib turadi
+    // Absence button is always visible
     absenceBtn.style.display = "block";
     absenceBtn.textContent = "Day off";
     absenceBtn.classList.remove("bg-red-400", "opacity-50", "cursor-not-allowed");
@@ -358,10 +358,10 @@ async function updateCheckInState(uid) {
         checkInBtn.classList.add("opacity-50", "cursor-not-allowed", isLate ? "bg-yellow-400" : "bg-green-500");
         checkInBtn.classList.remove("bg-blue-500");
 
-        // Absence tugmasini o‘chirib qo‘yamiz
+        // Disable absence button
         absenceBtn.disabled = true;
         absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
-    } else if (status === "-" || status === "absent" || status.startsWith("-@")) {
+    } else if (status === "-" || status === "absent" || (status && status.startsWith("-@"))) {
         checkInBtn.textContent = "Check-in yopilgan (kelmagan)";
         checkInBtn.disabled = true;
         checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
