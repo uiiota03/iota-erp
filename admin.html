@@ -24,26 +24,19 @@
       animation: fadeIn 0.3s ease-out;
     }
   </style>
-
 </head>
 
 <body class="bg-gray-100 min-h-screen">
   <!-- Navbar -->
-  <!-- Navbar -->
   <header class="bg-white shadow fixed w-full top-0 left-0 z-10">
     <div class="container mx-auto px-6 py-4 flex justify-between items-center">
       <h1 class="text-2xl font-bold">Admin Panel</h1>
-
-      <!-- Mobile toggle -->
-      <!-- Navbar ichida, Logout tugmasi oldidan qo‘ying -->
       <button id="sidebarToggle" class="md:hidden text-gray-700 focus:outline-none">
-        <!-- Icon (3 ta chiziq) -->
         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
           xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path>
         </svg>
       </button>
-
       <button id="logoutBtn" class="hidden md:inline-block bg-red-500 text-white px-4 py-2 rounded">Logout</button>
     </div>
   </header>
@@ -78,6 +71,7 @@
                 <th class="px-4 py-2 border">Position</th>
                 <th class="px-4 py-2 border">Start Date</th>
                 <th class="px-4 py-2 border">Working time</th>
+                <th class="px-4 py-2 border">Shift Type</th> <!-- Smena turi -->
                 <th class="px-4 py-2 border">Vacation Left</th>
               </tr>
             </thead>
@@ -105,15 +99,13 @@
                 <th class="border px-2 py-1">T/r</th>
                 <th class="border px-2 py-1">Ism</th>
                 <th class="border px-2 py-1">Familiya</th>
+                <th class="border px-2 py-1">Shift Type</th> <!-- Smena turi -->
                 <th class="border px-2 py-1 text-green-600">Kelgan</th>
                 <th class="border px-2 py-1 text-red-600">Kelmagan</th>
                 <th class="border px-2 py-1">Vaqt</th>
-                <!-- Sanalar dinamik qo‘shiladi -->
               </tr>
             </thead>
-            <tbody id="tabel-body">
-              <!-- Hodimlar va belgilar -->
-            </tbody>
+            <tbody id="tabel-body"></tbody>
           </table>
         </div>
       </section>
@@ -147,15 +139,12 @@
               <th class="p-2 border">Date</th>
               <th class="p-2 border">Reason</th>
               <th class="p-2 border">Until Date</th>
-              <th class="p-2 border">This is a mediacal resason?</th>
+              <th class="p-2 border">This is a medical reason?</th>
             </tr>
           </thead>
-          <tbody id="dayOffTableBody" class="bg-white">
-            <!-- Dynamic rows here -->
-          </tbody>
+          <tbody id="dayOffTableBody" class="bg-white"></tbody>
         </table>
       </div>
-
     </main>
   </div>
 
@@ -167,10 +156,13 @@
         <input name="firstName" type="text" class="w-full border px-3 py-2 rounded" placeholder="First Name" required />
         <input name="lastName" type="text" class="w-full border px-3 py-2 rounded" placeholder="Last Name" required />
         <input name="email" type="email" class="w-full border px-3 py-2 rounded" placeholder="Email" required />
-        <input name="password" type="password" class="w-full border px-3 py-2 rounded" placeholder="Password"
-          required />
+        <input name="password" type="password" class="w-full border px-3 py-2 rounded" placeholder="Password" required />
         <input name="position" type="text" class="w-full border px-3 py-2 rounded" placeholder="Position" required />
         <input name="startDate" type="date" class="w-full border px-3 py-2 rounded" required />
+        <select name="shiftType" class="w-full border px-3 py-2 rounded">
+          <option value="">Oddiy</option>
+          <option value="shift">Shiftli</option>
+        </select> <!-- Yangilangan: Faqat oddiy yoki shiftli -->
         <div id="addStatus" class="text-sm text-green-600"></div>
         <div class="flex justify-between items-center">
           <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded">Add</button>
@@ -181,25 +173,18 @@
     </div>
   </div>
 
-  <!-- Vacation Modal (Hidden by default) -->
+  <!-- Vacation Modal -->
   <div id="vacationModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 hidden">
     <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 relative animate-fadeIn">
-
-      <!-- Close Button -->
       <button onclick="document.getElementById('vacationModal').classList.add('hidden')"
         class="absolute top-3 right-3 text-gray-500 hover:text-gray-700 transition">
         ✕
       </button>
-
-      <!-- Modal Content Container -->
       <div id="vacationModalContent" class="text-sm text-gray-700 space-y-2">
-        <!-- Dynamic content gets inserted here by JavaScript -->
         <p>Loading...</p>
       </div>
-
     </div>
   </div>
-
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -225,7 +210,6 @@
       }
     });
   </script>
-
 </body>
 
 </html>

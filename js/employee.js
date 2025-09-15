@@ -21,12 +21,14 @@ const MAX_DISTANCE_KM = 0.5; // 500 meters allowed radius
 const nameEl = document.getElementById("employeeName");
 const roleEl = document.getElementById("employeeRole");
 const startDateEl = document.getElementById("employeeStartDate");
+const shiftTypeEl = document.getElementById("employeeShiftType");
 const checkInBtn = document.getElementById("checkInBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const calendar = document.getElementById("calendar");
 const monthSelect = document.getElementById("monthSelect");
 const currentMonthLabel = document.getElementById("currentMonthLabel");
-const absenceBtn = document.getElementById("absenceBtn"); // Yangi tugma
+const absenceBtn = document.getElementById("absenceBtn");
+const loader = document.getElementById("loader");
 
 // Utility
 function getTodayString() {
@@ -41,11 +43,6 @@ function getMonthString(date) {
     return date.toISOString().slice(0, 7);
 }
 
-// function isWeekend(date) {
-//     const day = date.getDay();
-//     return day === 0 || day === 6;
-// }
-
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -59,7 +56,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// Yangi funksiya: Kela olmaganlikni bildirish
+// Absence Modal Functions
 function showAbsenceModal() {
     document.getElementById("absenceModal").classList.remove("hidden");
 }
@@ -69,138 +66,204 @@ function hideAbsenceModal() {
 }
 
 async function reportAbsenceModal(uid) {
-    showAbsenceModal();
+    try {
+        loader.classList.remove("hidden");
+        showAbsenceModal();
+        const submitBtn = document.getElementById("submitAbsenceBtn");
+        const cancelBtn = document.getElementById("cancelAbsenceBtn");
 
-    const submitBtn = document.getElementById("submitAbsenceBtn");
-    const cancelBtn = document.getElementById("cancelAbsenceBtn");
+        const handleSubmit = async () => {
+            try {
+                loader.classList.remove("hidden");
+                const reason = document.getElementById("absenceReason").value.trim();
+                const untilDate = document.getElementById("absenceUntil").value;
+                const isMedical = document.getElementById("isMedical").checked;
 
-    const handleSubmit = async () => {
-        const reason = document.getElementById("absenceReason").value.trim();
-        const untilDate = document.getElementById("absenceUntil").value;
-        const isMedical = document.getElementById("isMedical").checked;
+                if (!reason) {
+                    alert("⚠️ Sababni kiriting.");
+                    loader.classList.add("hidden");
+                    return;
+                }
 
-        if (!reason) {
-            alert("⚠️ Sababni kiriting.");
+                const today = getTodayString();
+                const monthStr = today.slice(0, 7);
+                const docRef = doc(db, "attendance", monthStr);
+                const absenceDocRef = doc(db, "absenceReasons", `${uid}_${today}`);
+
+                const snap = await getDoc(docRef);
+                let data = snap.exists() ? snap.data() : {};
+                if (!data[uid]) data[uid] = {};
+                data[uid][today] = "-";
+
+                await setDoc(absenceDocRef, {
+                    uid,
+                    date: today,
+                    reason,
+                    untilDate: untilDate || null,
+                    isMedical,
+                    timestamp: new Date()
+                });
+
+                await setDoc(docRef, data);
+
+                alert("✅ Kela olmaslik sababi saqlandi.");
+
+                absenceBtn.disabled = true;
+                absenceBtn.textContent = "Qayd etildi";
+                absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+
+                checkInBtn.disabled = true;
+                checkInBtn.textContent = "Check-in yopilgan";
+                checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
+
+                await loadAttendance(uid, monthStr);
+                await updateCheckInState(uid);
+
+                hideAbsenceModal();
+                removeListeners();
+                loader.classList.add("hidden");
+            } catch (error) {
+                console.error("❌ Absence report xatosi:", error);
+                alert("⚠️ Kela olmaslik sababini saqlashda xato yuz berdi.");
+                loader.classList.add("hidden");
+            }
+        };
+
+        const removeListeners = () => {
+            submitBtn.removeEventListener("click", handleSubmit);
+            cancelBtn.removeEventListener("click", hideAbsenceModal);
+        };
+
+        submitBtn.addEventListener("click", handleSubmit);
+        cancelBtn.addEventListener("click", () => {
+            hideAbsenceModal();
+            removeListeners();
+            loader.classList.add("hidden");
+        });
+    } catch (error) {
+        console.error("❌ Absence modal xatosi:", error);
+        alert("⚠️ Modal ochishda xato yuz berdi.");
+        loader.classList.add("hidden");
+    }
+}
+
+// Check-In Handler with Shift Logic
+async function checkIn(uid, userData) {
+    try {
+        loader.classList.remove("hidden");
+        const now = new Date();
+        const hour = now.getHours();
+        const minute = now.getMinutes();
+        const today = getTodayString();
+        const monthStr = today.slice(0, 7);
+
+        const isShiftEmployee = userData.shiftType === "shift";
+        let expectedShift = null;
+        let isRestDay = false;
+
+        if (isShiftEmployee) {
+            const startDate = new Date(userData.startDate);
+            const daysSinceHire = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+            const cyclePosition = daysSinceHire % 4;
+            isRestDay = cyclePosition >= 2;
+            if (!isRestDay) {
+                expectedShift = cyclePosition === 0 ? "day" : "night";
+            }
+        }
+
+        if (isRestDay) {
+            alert("⚠️ Bugun siz uchun dam olish kuni.");
+            loader.classList.add("hidden");
             return;
         }
 
-        const today = getTodayString();
-        const monthStr = today.slice(0, 7);
-        const docRef = doc(db, "attendance", monthStr);
-        const absenceDocRef = doc(db, "absenceReasons", `${uid}_${today}`);
-
-        const snap = await getDoc(docRef);
-        let data = snap.exists() ? snap.data() : {};
-        if (!data[uid]) data[uid] = {};
-        data[uid][today] = "-";
-
-        await setDoc(absenceDocRef, {
-            uid,
-            date: today,
-            reason,
-            untilDate: untilDate || null,
-            isMedical,
-            timestamp: new Date()
-        });
-
-        await setDoc(docRef, data);
-
-        alert("✅ Kela olmaslik sababi saqlandi.");
-
-        // Tugmalarni o‘chirish
-        absenceBtn.disabled = true;
-        absenceBtn.textContent = "Qayd etildi";
-        absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
-
-        checkInBtn.disabled = true;
-        checkInBtn.textContent = "Check-in yopilgan";
-        checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
-
-        await loadAttendance(uid, monthStr);
-        await updateCheckInState(uid);
-
-        hideAbsenceModal();
-        removeListeners(); // oldingi listenerlarni olib tashlash
-    };
-
-    const removeListeners = () => {
-        submitBtn.removeEventListener("click", handleSubmit);
-        cancelBtn.removeEventListener("click", hideAbsenceModal);
-    };
-
-    submitBtn.addEventListener("click", handleSubmit);
-    cancelBtn.addEventListener("click", () => {
-        hideAbsenceModal();
-        removeListeners();
-    });
-}
-
-// Check-In handler
-async function checkIn(uid) {
-    const now = new Date();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
-
-    const today = getTodayString();
-    const monthStr = today.slice(0, 7);
-    const docRef = doc(db, "attendance", monthStr);
-    const snap = await getDoc(docRef);
-    let data = snap.exists() ? snap.data() : {};
-
-    if (!data[uid]) data[uid] = {};
-
-    if (hour >= 17) {
-        alert("⚠️ Soat 17:00 dan kech bo‘ldi. Siz ishga kelmagan deb belgilandingiz.");
-        data[uid][today] = "-";
-        await setDoc(docRef, data);
-
-        checkInBtn.disabled = true;
-        checkInBtn.textContent = "Checked";
-        checkInBtn.classList.add("opacity-50", "cursor-not-allowed");
-
-        loadAttendance(uid, monthStr);
-        updateCheckInState(uid);
-        return;
-    }
-
-    if (hour > 8 || (hour === 8 && minute > 10)) {
-        alert("⚠️ Siz kechikdingiz, ammo check-in qabul qilindi.");
-    }
-
-    return new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(async (position) => {
-            const { latitude, longitude } = position.coords;
-            const distance = calculateDistance(
-                latitude,
-                longitude,
-                OFFICE_LOCATION.lat,
-                OFFICE_LOCATION.lng
-            );
-
-            if (distance > MAX_DISTANCE_KM) {
-                alert("📍 Siz ofis hududida emassiz. Check-in amalga oshmadi.");
-                return reject("Out of range");
+        // Validate check-in time based on shift type
+        if (isShiftEmployee) {
+            const currentShift = (hour >= 8 && hour < 20) ? "day" : "night";
+            if (currentShift !== expectedShift) {
+                alert(`⚠️ Siz faqat ${expectedShift === "day" ? "08:00-20:00" : "20:00-08:00"} oralig‘ida check-in qilishingiz mumkin.`);
+                loader.classList.add("hidden");
+                return;
             }
+            // Check for late check-in (10-minute grace period)
+            if (expectedShift === "day" && (hour > 8 || (hour === 8 && minute > 10))) {
+                alert("⚠️ Siz kunduzgi smenada kechikdingiz, ammo check-in qabul qilindi.");
+            } else if (expectedShift === "night" && (hour > 20 || (hour === 20 && minute > 10))) {
+                alert("⚠️ Siz tungi smenada kechikdingiz, ammo check-in qabul qilindi.");
+            }
+        } else {
+            // Regular employee: 08:00–17:00
+            if (hour < 8 || hour >= 17) {
+                alert("⚠️ Oddiy smena: Faqat 08:00-17:00 oralig‘ida check-in mumkin. Kech bo‘ldi, siz kelmagan deb belgilandingiz.");
+                const docRef = doc(db, "attendance", monthStr);
+                const snap = await getDoc(docRef);
+                let data = snap.exists() ? snap.data() : {};
+                if (!data[uid]) data[uid] = {};
+                data[uid][today] = "-";
+                await setDoc(docRef, data);
 
-            const timeStr = now.toTimeString().slice(0, 5);
-            data[uid][today] = `+@${timeStr}`;
-            await setDoc(docRef, data);
+                checkInBtn.disabled = true;
+                checkInBtn.textContent = "Check-in yopilgan";
+                checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
 
-            checkInBtn.disabled = true;
-            checkInBtn.textContent = "Checked";
-            checkInBtn.classList.add("opacity-50", "cursor-not-allowed");
+                await loadAttendance(uid, monthStr);
+                await updateCheckInState(uid);
+                loader.classList.add("hidden");
+                return;
+            }
+            // Check for late check-in for regular employees
+            if (hour > 8 || (hour === 8 && minute > 10)) {
+                alert("⚠️ Siz kechikdingiz, ammo check-in qabul qilindi.");
+            }
+        }
 
-            loadAttendance(uid, monthStr);
-            updateCheckInState(uid);
-            resolve();
-        }, (err) => {
-            alert("📵 Geolocation permission rad etildi.");
-            reject(err);
+        return new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const { latitude, longitude } = position.coords;
+                const distance = calculateDistance(
+                    latitude,
+                    longitude,
+                    OFFICE_LOCATION.lat,
+                    OFFICE_LOCATION.lng
+                );
+
+                if (distance > MAX_DISTANCE_KM) {
+                    alert("📍 Siz ofis hududida emassiz. Check-in amalga oshmadi.");
+                    loader.classList.add("hidden");
+                    return reject("Out of range");
+                }
+
+                const timeStr = now.toTimeString().slice(0, 5);
+                const docRef = doc(db, "attendance", monthStr);
+                const snap = await getDoc(docRef);
+                let data = snap.exists() ? snap.data() : {};
+                if (!data[uid]) data[uid] = {};
+                data[uid][today] = `+@${timeStr}`;
+                await setDoc(docRef, data);
+
+                checkInBtn.disabled = true;
+                checkInBtn.textContent = "Checked";
+                checkInBtn.classList.add("opacity-50", "cursor-not-allowed");
+
+                await loadAttendance(uid, monthStr);
+                await updateCheckInState(uid);
+                loader.classList.add("hidden");
+                resolve();
+            }, (err) => {
+                alert("📵 Geolocation permission rad etildi.");
+                loader.classList.add("hidden");
+                reject(err);
+            });
         });
-    });
+    } catch (error) {
+        console.error("❌ Check-in xatosi:", error);
+        alert("⚠️ Check-in jarayonida xato yuz berdi. Iltimos, qayta urinib ko‘ring.");
+        loader.classList.add("hidden");
+    }
 }
 
 async function loadAttendance(uid, monthStr) {
+    loader.classList.remove("hidden");
     const [year, month] = monthStr.split("-").map(Number);
     const docRef = doc(db, "attendance", monthStr);
     const snap = await getDoc(docRef);
@@ -212,6 +275,10 @@ async function loadAttendance(uid, monthStr) {
     const daysInMonth = new Date(year, month, 0).getDate();
     const firstDay = new Date(year, month - 1, 1).getDay();
     const todayStr = getTodayString();
+
+    const userSnap = await getDoc(doc(db, "users", uid));
+    const userData = userSnap.exists() ? userSnap.data() : {};
+    const isShiftEmployee = userData.shiftType === "shift";
 
     const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     weekdays.forEach(day => {
@@ -231,18 +298,39 @@ async function loadAttendance(uid, monthStr) {
         const isWeekend = current.getDay() === 0 || current.getDay() === 6;
         const isToday = date === todayStr;
 
+        let isRestDay = false;
+        let expectedShift = null;
+        if (isShiftEmployee) {
+            const startDate = new Date(userData.startDate);
+            const daysSinceHire = Math.floor((current - startDate) / (1000 * 60 * 60 * 24));
+            const cyclePosition = daysSinceHire % 4;
+            isRestDay = cyclePosition >= 2;
+            if (!isRestDay) {
+                expectedShift = cyclePosition === 0 ? "day" : "night";
+            }
+        }
+
         const cell = document.createElement("div");
         const status = userAttendance[date];
 
         let bgColor = "bg-gray-200";
         let tooltip = "Ma'lumot yo'q";
 
-        if (status?.startsWith("+")) {
+        if (status === "D" && isShiftEmployee) {
+            bgColor = "bg-green-100 text-black";
+            tooltip = `🌞 Kunduzgi smena (11 soat)`;
+        } else if (status === "N" && isShiftEmployee) {
+            bgColor = "bg-blue-200 text-black";
+            tooltip = `🌙 Tungi smena (11 soat)`;
+        } else if (status?.startsWith("+")) {
             const timeStr = status.includes("@") ? status.split("@")[1] : null;
             if (timeStr) {
                 const [h, m] = timeStr.split(":").map(Number);
-                const isLate = h > 8 || (h === 8 && m > 20);
-                bgColor = isLate ? "bg-green-100 text-black" : "bg-green-500 text-white";
+                const isLate = isShiftEmployee
+                    ? (expectedShift === "day" && (h > 8 || (h === 8 && m > 10))) ||
+                      (expectedShift === "night" && (h > 20 || (h === 20 && m > 10)))
+                    : (h > 8 || (h === 8 && m > 10));
+                bgColor = isLate ? "bg-yellow-400 text-black" : "bg-green-500 text-white";
                 tooltip = isLate
                     ? `⏰ Kechikib keldi: ${timeStr}`
                     : `✅ Vaqtida keldi: ${timeStr}`;
@@ -252,10 +340,12 @@ async function loadAttendance(uid, monthStr) {
             }
         } else if (status === "-") {
             bgColor = "bg-red-600 text-white";
-            // Sababni Firestore'dan olish
             const absenceDocRef = doc(db, "absenceReasons", `${uid}_${date}`);
             const absenceSnap = await getDoc(absenceDocRef);
             tooltip = absenceSnap.exists() ? `❌ Kelmagan: ${absenceSnap.data().reason}` : "❌ Kelmagan";
+        } else if (isRestDay && isShiftEmployee) {
+            bgColor = "bg-red-100 text-red-600";
+            tooltip = "🛌 Dam olish kuni";
         } else if (isWeekend) {
             bgColor = "bg-yellow-200";
             tooltip = "🟡 Dam olish kuni";
@@ -270,9 +360,10 @@ async function loadAttendance(uid, monthStr) {
         cell.id = `day-${date}`;
         calendar.appendChild(cell);
     }
+    loader.classList.add("hidden");
 }
 
-// Month dropdown setup
+// Month Dropdown Setup
 function generateMonthOptions() {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -293,8 +384,12 @@ function generateMonthOptions() {
 }
 
 async function markApprovedVacationsOnCalendar() {
+    loader.classList.remove("hidden");
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user) {
+        loader.classList.add("hidden");
+        return;
+    }
 
     try {
         const q = query(
@@ -326,78 +421,150 @@ async function markApprovedVacationsOnCalendar() {
     } catch (err) {
         console.error("❌ Vacation data error:", err);
     }
+    loader.classList.add("hidden");
 }
 
 async function updateCheckInState(uid) {
-    const today = getTodayString();
-    const monthStr = today.slice(0, 7);
-    const docRef = doc(db, "attendance", monthStr);
-    const snap = await getDoc(docRef);
-    const data = snap.exists() ? snap.data() : {};
-    const status = data[uid]?.[today] || null; // Use null as a fallback if status is undefined
+    try {
+        loader.classList.remove("hidden");
+        const today = getTodayString();
+        const monthStr = today.slice(0, 7);
+        const docRef = doc(db, "attendance", monthStr);
+        const snap = await getDoc(docRef);
+        const data = snap.exists() ? snap.data() : {};
+        const status = data[uid]?.[today] || null;
 
-    const now = new Date();
-    const hour = now.getHours();
-    const minute = now.getMinutes();
+        const userSnap = await getDoc(doc(db, "users", uid));
+        const userData = userSnap.exists() ? userSnap.data() : {};
+        const isShiftEmployee = userData.shiftType === "shift";
 
-    // Absence button is always visible
-    absenceBtn.style.display = "block";
-    absenceBtn.textContent = "Day off";
-    absenceBtn.classList.remove("bg-red-400", "opacity-50", "cursor-not-allowed");
-    absenceBtn.classList.add("bg-orange-500");
+        const now = new Date();
+        const hour = now.getHours();
+        const minute = now.getMinutes();
 
-    if (status && status.startsWith("+@")) {
-        const timeStr = status.split("@")[1];
-        const [h, m] = timeStr.split(":").map(Number);
-        const isLate = h > 8 || (h === 8 && m > 10);
+        absenceBtn.style.display = "block";
+        absenceBtn.textContent = "Day off";
+        absenceBtn.classList.remove("bg-red-400", "opacity-50", "cursor-not-allowed");
+        absenceBtn.classList.add("bg-orange-500");
 
-        checkInBtn.textContent = isLate
-            ? `Kechikib keldi - ${timeStr}`
-            : `Checked In - ${timeStr}`;
-        checkInBtn.disabled = true;
-        checkInBtn.classList.add("opacity-50", "cursor-not-allowed", isLate ? "bg-yellow-400" : "bg-green-500");
-        checkInBtn.classList.remove("bg-blue-500");
+        let isRestDay = false;
+        let expectedShift = null;
+        if (isShiftEmployee) {
+            const startDate = new Date(userData.startDate);
+            const daysSinceHire = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+            const cyclePosition = daysSinceHire % 4;
+            isRestDay = cyclePosition >= 2;
+            if (!isRestDay) {
+                expectedShift = cyclePosition === 0 ? "day" : "night";
+            }
+        }
 
-        // Disable absence button
-        absenceBtn.disabled = true;
-        absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
-    } else if (status === "-" || status === "absent" || (status && status.startsWith("-@"))) {
-        checkInBtn.textContent = "Check-in yopilgan (kelmagan)";
-        checkInBtn.disabled = true;
-        checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
-        checkInBtn.classList.remove("bg-blue-500");
+        if (status && status.startsWith("+@")) {
+            const timeStr = status.split("@")[1];
+            const [h, m] = timeStr.split(":").map(Number);
+            const isLate = isShiftEmployee
+                ? (expectedShift === "day" && (h > 8 || (h === 8 && m > 10))) ||
+                  (expectedShift === "night" && (h > 20 || (h === 20 && m > 10)))
+                : (h > 8 || (h === 8 && m > 10));
 
-        absenceBtn.disabled = true;
-        absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
-        absenceBtn.textContent = "Qayd etildi";
-    } else {
-        if (hour >= 17) {
-            checkInBtn.textContent = "Check-in yopilgan (kech bo‘ldi)";
+            checkInBtn.textContent = isLate
+                ? `Kechikib keldi - ${timeStr}`
+                : `Checked In - ${timeStr}`;
+            checkInBtn.disabled = true;
+            checkInBtn.classList.add("opacity-50", "cursor-not-allowed", isLate ? "bg-yellow-400" : "bg-green-500");
+            checkInBtn.classList.remove("bg-blue-500");
+
+            absenceBtn.disabled = true;
+            absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+        } else if (status === "D" && isShiftEmployee) {
+            checkInBtn.textContent = "Kunduzgi smena (Admin qo‘ydi)";
+            checkInBtn.disabled = true;
+            checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-green-100");
+            checkInBtn.classList.remove("bg-blue-500");
+
+            absenceBtn.disabled = true;
+            absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+            absenceBtn.textContent = "Qayd etildi";
+        } else if (status === "N" && isShiftEmployee) {
+            checkInBtn.textContent = "Tungi smena (Admin qo‘ydi)";
+            checkInBtn.disabled = true;
+            checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-blue-200");
+            checkInBtn.classList.remove("bg-blue-500");
+
+            absenceBtn.disabled = true;
+            absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+            absenceBtn.textContent = "Qayd etildi";
+        } else if (status === "-") {
+            checkInBtn.textContent = "Check-in yopilgan (kelmagan)";
             checkInBtn.disabled = true;
             checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
             checkInBtn.classList.remove("bg-blue-500");
 
             absenceBtn.disabled = true;
             absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+            absenceBtn.textContent = "Qayd etildi";
         } else {
-            checkInBtn.textContent = "Check In";
-            checkInBtn.disabled = false;
-            checkInBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-red-400", "bg-yellow-400", "bg-green-500");
-            checkInBtn.classList.add("bg-blue-500");
+            if (isRestDay) {
+                checkInBtn.textContent = "Bugun dam olish kuni";
+                checkInBtn.disabled = true;
+                checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-100");
+                checkInBtn.classList.remove("bg-blue-500");
 
-            absenceBtn.disabled = false;
-            absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
+                absenceBtn.disabled = true;
+                absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+            } else if (isShiftEmployee) {
+                if ((expectedShift === "day" && (hour < 8 || hour >= 20)) ||
+                    (expectedShift === "night" && (hour >= 8 && hour < 20))) {
+                    checkInBtn.textContent = `Check-in yopilgan (${expectedShift === "day" ? "08:00-20:00" : "20:00-08:00"})`;
+                    checkInBtn.disabled = true;
+                    checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
+                    checkInBtn.classList.remove("bg-blue-500");
+
+                    absenceBtn.disabled = false;
+                    absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
+                } else {
+                    checkInBtn.textContent = `Check In (${expectedShift === "day" ? "Kunduzgi" : "Tungi"})`;
+                    checkInBtn.disabled = false;
+                    checkInBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-red-400", "bg-yellow-400", "bg-green-500");
+                    checkInBtn.classList.add("bg-blue-500");
+
+                    absenceBtn.disabled = false;
+                    absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
+                }
+            } else if (hour >= 17) {
+                checkInBtn.textContent = "Check-in yopilgan (kech bo‘ldi)";
+                checkInBtn.disabled = true;
+                checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
+                checkInBtn.classList.remove("bg-blue-500");
+
+                absenceBtn.disabled = false;
+                absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
+            } else {
+                checkInBtn.textContent = "Check In";
+                checkInBtn.disabled = false;
+                checkInBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-red-400", "bg-yellow-400", "bg-green-500");
+                checkInBtn.classList.add("bg-blue-500");
+
+                absenceBtn.disabled = false;
+                absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
+            }
         }
+        loader.classList.add("hidden");
+    } catch (error) {
+        console.error("❌ updateCheckInState xatosi:", error);
+        loader.classList.add("hidden");
     }
 }
 
-// Auth state check
+// Auth State Check
 onAuthStateChanged(auth, async (user) => {
     if (!user) {
         localStorage.removeItem("userData");
+        loader.classList.add("hidden");
         return (window.location.href = "index.html");
     }
 
+    loader.classList.remove("hidden");
     const userRef = doc(db, "users", user.uid);
     const userSnap = await getDoc(userRef);
 
@@ -405,6 +572,7 @@ onAuthStateChanged(auth, async (user) => {
         console.warn("❌ Firestore’da user topilmadi.");
         localStorage.removeItem("userData");
         await signOut(auth);
+        loader.classList.add("hidden");
         return (window.location.href = "index.html");
     }
 
@@ -414,6 +582,7 @@ onAuthStateChanged(auth, async (user) => {
     nameEl.textContent = `${userData.firstName} ${userData.lastName}`;
     roleEl.textContent = userData.position;
     startDateEl.textContent = userData.startDate;
+    shiftTypeEl.textContent = userData.shiftType === "shift" ? "Shiftli" : "Oddiy";
 
     generateMonthOptions();
 
@@ -424,14 +593,13 @@ onAuthStateChanged(auth, async (user) => {
     await updateCheckInState(user.uid);
 
     checkInBtn.addEventListener("click", async () => {
-        await checkIn(user.uid);
+        await checkIn(user.uid, userData);
         await updateCheckInState(user.uid);
     });
 
-    // Yangi tugma uchun event listener
     absenceBtn.addEventListener("click", async () => {
-        await reportAbsenceModal(user.uid); // Yangi modal funksiyani chaqiramiz
-        await updateCheckInState(user.uid); // Modal yopilgandan keyin state yangilanadi
+        await reportAbsenceModal(user.uid);
+        await updateCheckInState(user.uid);
     });
 
     logoutBtn.addEventListener("click", () => {
@@ -440,9 +608,12 @@ onAuthStateChanged(auth, async (user) => {
     });
 
     monthSelect.addEventListener("change", async () => {
+        loader.classList.remove("hidden");
         const selectedMonth = monthSelect.value;
         currentMonthLabel.textContent = selectedMonth;
         await loadAttendance(user.uid, selectedMonth);
         await markApprovedVacationsOnCalendar();
+        loader.classList.add("hidden");
     });
+    loader.classList.add("hidden");
 });

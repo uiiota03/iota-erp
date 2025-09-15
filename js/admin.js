@@ -1,4 +1,3 @@
-// admin.js
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged
@@ -15,20 +14,18 @@ import {
   where,
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 import { auth, db } from "./firebase-config.js";
-
 import { exportAttendanceToExcel } from "./exportExcel.js";
+import { exportAttendanceToHTML } from './exportAttendence.js';
 
-// Tugma bosilganda:
+// Export buttons
 document.getElementById("exportExcelBtn").addEventListener("click", async () => {
   const monthStr = document.getElementById("month-select").value;
-  const employees = globalEmployees; // Sizda globalda saqlangan
+  const employees = globalEmployees;
   const attendanceDocSnap = await getDoc(doc(db, "attendance", monthStr));
   const attendanceData = attendanceDocSnap.exists() ? attendanceDocSnap.data() : {};
-
   exportAttendanceToExcel(monthStr, employees, attendanceData);
 });
 
-import { exportAttendanceToHTML } from './exportAttendence.js';
 document.getElementById("exportWebBtn").addEventListener("click", async () => {
   const monthStr = document.getElementById("month-select").value;
   const employees = globalEmployees;
@@ -37,6 +34,7 @@ document.getElementById("exportWebBtn").addEventListener("click", async () => {
   exportAttendanceToHTML(monthStr, employees, attendanceData);
 });
 
+// Auth check
 onAuthStateChanged(auth, (user) => {
   if (!user) {
     window.location.href = "login.html";
@@ -52,37 +50,21 @@ const tabelBody = document.getElementById("tabel-body");
 let globalEmployees = [];
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const monthSelect = document.getElementById("month-select");
-
   if (!monthSelect) {
     console.error("❌ monthSelect elementi topilmadi!");
     return;
   }
 
-  // 1. Oylar ro'yxatini generate qilamiz
   generateMonths();
-
-  // 2. Ishchilarni yuklaymiz va globalga saqlaymiz
   globalEmployees = await loadEmployees();
-
-  // 3. Hozirgi oy bo'yicha jadvalni chizamiz
   const selectedMonth = monthSelect.value || formatMonth(new Date());
   await drawTabel(selectedMonth, globalEmployees);
 
-  // 4. Oy tanlanganda qayta chizamiz
   monthSelect.addEventListener("change", () => {
     const selected = monthSelect.value;
     drawTabel(selected, globalEmployees);
   });
 });
-
-// // Util function: calculate difference between 2 dates in days
-// function getDaysDiff(start, end) {
-//   const startDate = new Date(start);
-//   const endDate = new Date(end);
-//   const diffTime = endDate.getTime() - startDate.getTime();
-//   return Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-// }
 
 function formatDate(dateObj) {
   const y = dateObj.getFullYear();
@@ -93,13 +75,14 @@ function formatDate(dateObj) {
 
 function getTodayString() {
   const today = new Date();
-  return today.toISOString().split("T")[0]; // "2025-07-22"
+  return today.toISOString().split("T")[0];
 }
 
 const formatMonth = (date) => date.toISOString().slice(0, 7);
 function getMonthString(date) {
   return date.toISOString().slice(0, 7);
 }
+
 function generateMonths() {
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -109,10 +92,7 @@ function generateMonths() {
     const option = document.createElement("option");
     option.value = val;
     option.textContent = d.toLocaleString("default", { month: "long", year: "numeric" });
-
-    // ✅ Hozirgi oy default tanlanadi
     if (val === getMonthString(now)) option.selected = true;
-
     monthSelect.appendChild(option);
   }
 }
@@ -120,14 +100,11 @@ function generateMonths() {
 async function loadAttendanceData(monthStr) {
   if (!monthStr) {
     const now = new Date();
-    monthStr = now.toISOString().slice(0, 7); // "2025-07"
+    monthStr = now.toISOString().slice(0, 7);
   }
-
   const docRef = doc(db, "attendance", monthStr);
   const docSnap = await getDoc(docRef);
-
-  if (!docSnap.exists()) return {};
-  return docSnap.data();
+  return docSnap.exists() ? docSnap.data() : {};
 }
 
 async function saveAttendance(uid, day, status) {
@@ -137,19 +114,21 @@ async function saveAttendance(uid, day, status) {
   const data = snap.exists() ? snap.data() : {};
 
   if (!data[uid]) data[uid] = {};
-  data[uid][day] = status;
-
+  if (status) {
+    data[uid][day] = status;
+  } else {
+    delete data[uid][day];
+  }
   await setDoc(docRef, data);
 }
 
 async function drawTabel(monthStr, employees) {
-  // Faqat "employee" bo'lganlarni olish
   employees = employees.filter(emp => {
     const role = (emp.position || "").toLowerCase();
     return role !== "it specialist";
   });
 
-  // Lavozim bo‘yicha tartiblash
+  // Tartiblash: avval lavozim, keyin oddiy > shiftli
   employees.sort((a, b) => {
     const getPriority = (position) => {
       if (!position || position.trim() === "") return 0;
@@ -157,16 +136,23 @@ async function drawTabel(monthStr, employees) {
       if (position.toLowerCase() === "specialist") return 2;
       return 0;
     };
-    return getPriority(a.position) - getPriority(b.position);
+    const priorityA = getPriority(a.position);
+    const priorityB = getPriority(b.position);
+    if (priorityA !== priorityB) return priorityA - priorityB;
+
+    const shiftA = a.shiftType ? 1 : 0;
+    const shiftB = b.shiftType ? 1 : 0;
+    return shiftA - shiftB;
   });
 
   tabelHeader.innerHTML = `
-    <th class="border border-gray-300 bg-white px-2 py-1">#</th>
-    <th class="border border-gray-300 bg-white px-2 py-1">First Name</th>
-    <th class="border border-gray-300 bg-white px-2 py-1">Last Name</th>
-    <th class="border border-gray-300 bg-white px-2 py-1 text-green-700">Attendent</th>
-    <th class="border border-gray-300 bg-white px-2 py-1 text-red-600">Absent</th>
-    <th class="border border-gray-300 bg-white px-2 py-1">Total hour</th>
+    <th class="border border-gray-300 bg-white px-2 py-1">T/r</th>
+    <th class="border border-gray-300 bg-white px-2 py-1">Ism</th>
+    <th class="border border-gray-300 bg-white px-2 py-1">Familiya</th>
+    <th class="border border-gray-300 bg-white px-2 py-1">Shift Type</th>
+    <th class="border border-gray-300 bg-white px-2 py-1 text-green-600">Kelgan</th>
+    <th class="border border-gray-300 bg-white px-2 py-1 text-red-600">Kelmagan</th>
+    <th class="border border-gray-300 bg-white px-2 py-1">Vaqt</th>
   `;
 
   tabelBody.innerHTML = "";
@@ -178,7 +164,6 @@ async function drawTabel(monthStr, employees) {
   const today = new Date();
   const todayStr = formatDate(today);
 
-  // Header kunlar
   for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(year, month - 1, day);
     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -198,10 +183,13 @@ async function drawTabel(monthStr, employees) {
     const lastEntry = attendanceData?.[emp.uid]?.[todayStr] || "";
     const checkinTime = getCheckinTime(lastEntry);
 
+    const shiftTypeDisplay = emp.shiftType ? "Shiftli" : "Oddiy";
+
     tr.innerHTML = `
       <td class="border border-gray-300 px-2 py-1">${index + 1}</td>
       <td class="border border-gray-300 px-2 py-1">${emp.firstName}</td>
       <td class="border border-gray-300 px-2 py-1">${emp.lastName}</td>
+      <td class="border border-gray-300 px-2 py-1">${shiftTypeDisplay}</td>
       <td class="border border-gray-300 px-2 py-1 text-green-600 font-bold" id="present-${emp.uid}">0</td>
       <td class="border border-gray-300 px-2 py-1 text-red-600 font-bold" id="absent-${emp.uid}">0</td>
       <td class="border border-gray-300 px-2 py-1 text-xs text-gray-500">${checkinTime}</td>
@@ -214,6 +202,18 @@ async function drawTabel(monthStr, employees) {
       const isWeekend = cellDate.getDay() === 0 || cellDate.getDay() === 6;
       const isToday = formatDate(cellDate) === todayStr;
 
+      let isRestDay = false;
+      let expectedShift = null;
+      if (emp.shiftType === "shift") {
+        const startDate = new Date(emp.startDate);
+        const daysSinceHire = Math.floor((cellDate - startDate) / (1000 * 60 * 60 * 24));
+        const cyclePosition = daysSinceHire % 4;
+        isRestDay = cyclePosition >= 2;
+        if (!isRestDay) {
+          expectedShift = cyclePosition === 0 ? "day" : "night";
+        }
+      }
+
       const cell = document.createElement("td");
       cell.className = "border border-gray-300 px-2 py-1 text-center text-sm";
       cell.contentEditable = !isFuture;
@@ -221,33 +221,40 @@ async function drawTabel(monthStr, employees) {
       cell.dataset.uid = emp.uid;
       cell.dataset.day = dateStr;
 
-      // Attendance status
       let status = attendanceData?.[emp.uid]?.[dateStr] || "";
       let displayStatus = status;
       if (status.includes("@")) {
         displayStatus = status.startsWith("O") || status.startsWith("E") ? "+" : status.split("@")[0];
       }
 
-      // Vacation check
       const userVacations = vacationData?.[emp.uid] || [];
       const isOnVacation = userVacations.some(vac => dateStr >= vac.from && dateStr <= vac.to);
 
       if (!status && isOnVacation) {
         displayStatus = "V";
         status = "V";
-      } else if (!status && !isOnVacation && !isWeekend && !isFuture) {
+      } else if (!status && !isOnVacation && !isWeekend && !isFuture && !isRestDay) {
         absent++;
       }
 
       cell.textContent = displayStatus;
 
-      // Stilize qilish
+      // Rang belgilash
+      let currentShift = null;
+      if (emp.shiftType === "shift" && (status.startsWith("+@") || status.startsWith("O@") || status.startsWith("E@"))) {
+        const timeStr = status.split("@")[1];
+        const [hour] = timeStr.split(":").map(Number);
+        currentShift = (hour >= 8 && hour < 20) ? "day" : "night";
+      } else if (emp.shiftType === "shift" && (status === "D" || status === "N")) {
+        currentShift = status === "D" ? "day" : "night";
+      }
+
       if (status === "V") {
         cell.classList.add("bg-yellow-50", "text-yellow-600", "font-medium");
-      } else if (status.startsWith("+") || status.startsWith("O") || status.startsWith("E")) {
+      } else if (status.startsWith("+") || status.startsWith("O") || status.startsWith("E") || status === "D" || status === "N") {
         cell.classList.add(
-          status.startsWith("O") ? "bg-blue-100" : status.startsWith("E") ? "bg-orange-100" : "bg-green-50",
-          status.startsWith("O") ? "text-blue-700" : status.startsWith("E") ? "text-orange-700" : "text-green-700",
+          status.startsWith("O") ? "bg-blue-100" : status.startsWith("E") ? "bg-orange-100" : currentShift === "day" ? "bg-green-100" : currentShift === "night" ? "bg-blue-200" : "bg-green-50",
+          status.startsWith("O") ? "text-blue-700" : status.startsWith("E") ? "text-orange-700" : currentShift === "day" ? "text-green-700" : currentShift === "night" ? "text-blue-700" : "text-green-700",
           "font-medium"
         );
         present++;
@@ -264,7 +271,6 @@ async function drawTabel(monthStr, employees) {
         cell.classList.add("bg-white", "text-gray-400");
       }
 
-      // Save handler
       cell.addEventListener("blur", async () => {
         if (isFuture) return;
         let newStatus = cell.textContent.trim();
@@ -272,7 +278,24 @@ async function drawTabel(monthStr, employees) {
 
         if (newStatus === "+" || newStatus === "O") {
           const now = new Date();
-          const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+          const hours = now.getHours();
+          const minutes = now.getMinutes();
+          const timeStr = `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+
+          let currentShiftFromTime = (hours >= 8 && hours < 20) ? "day" : "night";
+
+          if (emp.shiftType === "shift") {
+            if (currentShiftFromTime !== expectedShift) {
+              alert(`⚠️ Bu vaqt bugungi shiftga (${expectedShift}) mos emas!`);
+              cell.textContent = "";
+              return;
+            }
+          } else if (hours < 8 || hours >= 17) {
+            alert("⚠️ Oddiy smena: Faqat 08:00-17:00 oralig‘ida check-in mumkin!");
+            cell.textContent = "";
+            return;
+          }
+
           if (newStatus === "O") {
             const overtimeHours = prompt("Overtime soatlarini kiriting (masalan, 2):", "0") || "0";
             valueToSave = `O@${timeStr}@${overtimeHours}`;
@@ -284,62 +307,111 @@ async function drawTabel(monthStr, employees) {
           valueToSave = `E@${leaveTime}`;
         } else if (newStatus === "-") {
           valueToSave = "-";
+        } else if (newStatus === "D" || newStatus === "N") {
+          if (emp.shiftType !== "shift") {
+            alert("⚠️ D yoki N faqat shiftli hodimlar uchun!");
+            cell.textContent = "";
+            return;
+          }
+          valueToSave = newStatus;
         } else if (newStatus === "") {
           valueToSave = "";
+        } else {
+          alert("⚠️ Noto'g'ri belgi! Faqat +, O, E, -, D, N yoki bo'sh mumkin.");
+          cell.textContent = "";
+          return;
         }
 
         await saveAttendance(emp.uid, dateStr, valueToSave);
-        if (newStatus === "+") checkLateTime(dateStr, emp.firstName);
+        if (newStatus === "+") checkLateTime(dateStr, emp.firstName, emp.shiftType, expectedShift, now.getHours(), now.getMinutes());
         drawTabel(monthStr, employees);
       });
 
       tr.appendChild(cell);
     }
 
-    // Working hours calculation
     let totalMinutesWorked = 0;
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${monthStr}-${String(day).padStart(2, "0")}`;
       const rawStatus = attendanceData?.[emp.uid]?.[dateStr] || "";
+      const cellDate = new Date(year, month - 1, day);
 
-      if (rawStatus.startsWith("+@")) {
+      let isRestDay = false;
+      if (emp.shiftType === "shift") {
+        const startDate = new Date(emp.startDate);
+        const daysSinceHire = Math.floor((cellDate - startDate) / (1000 * 60 * 60 * 24));
+        const cyclePosition = daysSinceHire % 4;
+        isRestDay = cyclePosition >= 2;
+      }
+
+      let currentShift = null;
+      if (emp.shiftType === "shift" && rawStatus.includes("@")) {
+        const timeStr = rawStatus.split("@")[1];
+        const [hour] = timeStr.split(":").map(Number);
+        currentShift = (hour >= 8 && hour < 20) ? "day" : "night";
+      } else if (emp.shiftType === "shift" && (rawStatus === "D" || rawStatus === "N")) {
+        currentShift = rawStatus === "D" ? "day" : "night";
+      }
+
+      if (rawStatus === "D" || rawStatus === "N") {
+        totalMinutesWorked += 11 * 60; // To'liq 11 soat
+      } else if (rawStatus.startsWith("+@")) {
         const timeStr = rawStatus.split("@")[1];
         let [hour, min] = timeStr.split(":").map(Number);
         let checkIn = new Date(year, month - 1, day, hour, min);
-        const endOfDay = new Date(year, month - 1, day, 17, 0);
-        const eightTen = new Date(year, month - 1, day, 8, 10);
-        if (checkIn <= eightTen) {
-          totalMinutesWorked += 8 * 60; // 8 soat
+        let startOfShift, endOfShift;
+        if (emp.shiftType === "shift") {
+          startOfShift = new Date(year, month - 1, day, currentShift === "day" ? 8 : 20, 0);
+          endOfShift = new Date(year, month - 1, day, currentShift === "day" ? 20 : 8, 0);
+          if (currentShift === "night" && hour < 8) endOfShift.setDate(endOfShift.getDate() + 1);
         } else {
-          const diff = Math.max(0, (endOfDay - checkIn) / 60000); // Kirishdan 17:00 gacha
+          startOfShift = new Date(year, month - 1, day, 8, 0);
+          endOfShift = new Date(year, month - 1, day, 17, 0);
+        }
+        if (checkIn <= startOfShift) {
+          totalMinutesWorked += (endOfShift - startOfShift) / 60000;
+        } else {
+          const diff = Math.max(0, (endOfShift - checkIn) / 60000);
           totalMinutesWorked += diff;
         }
       } else if (rawStatus.startsWith("O@")) {
         const [, timeStr, overtimeHours] = rawStatus.split("@");
         let [hour, min] = timeStr.split(":").map(Number);
         let checkIn = new Date(year, month - 1, day, hour, min);
-        const eightTen = new Date(year, month - 1, day, 8, 10);
-        const endOfDay = new Date(year, month - 1, day, 17, 0);
-        let baseMinutes = 0;
-        if (checkIn <= eightTen) {
-          baseMinutes = 8 * 60; // 8 soat
+        let startOfShift, endOfShift;
+        if (emp.shiftType === "shift") {
+          startOfShift = new Date(year, month - 1, day, currentShift === "day" ? 8 : 20, 0);
+          endOfShift = new Date(year, month - 1, day, currentShift === "day" ? 20 : 8, 0);
+          if (currentShift === "night" && hour < 8) endOfShift.setDate(endOfShift.getDate() + 1);
         } else {
-          baseMinutes = Math.max(0, (endOfDay - checkIn) / 60000); // Kirishdan 17:00 gacha
+          startOfShift = new Date(year, month - 1, day, 8, 0);
+          endOfShift = new Date(year, month - 1, day, 17, 0);
         }
-        totalMinutesWorked += baseMinutes + (Number(overtimeHours) || 0) * 60; // Overtime soatlarni qo'shish
+        let baseMinutes = 0;
+        if (checkIn <= startOfShift) {
+          baseMinutes = (endOfShift - startOfShift) / 60000;
+        } else {
+          baseMinutes = Math.max(0, (endOfShift - checkIn) / 60000);
+        }
+        totalMinutesWorked += baseMinutes + (Number(overtimeHours) || 0) * 60;
       } else if (rawStatus.startsWith("E@")) {
         const [, timeStr] = rawStatus.split("@");
         let [hour, min] = timeStr.split(":").map(Number);
         let leaveTime = new Date(year, month - 1, day, hour, min);
-        const startOfDay = new Date(year, month - 1, day, 8, 0);
-        const diff = Math.max(0, (leaveTime - startOfDay) / 60000); // 08:00 dan chiqish vaqtigacha
+        let startOfShift;
+        if (emp.shiftType === "shift") {
+          startOfShift = new Date(year, month - 1, day, currentShift === "day" ? 8 : 20, 0);
+        } else {
+          startOfShift = new Date(year, month - 1, day, 8, 0);
+        }
+        const diff = Math.max(0, (leaveTime - startOfShift) / 60000);
         totalMinutesWorked += diff;
       }
     }
 
     const workedHours = Math.floor(totalMinutesWorked / 60);
     const workedMinutes = totalMinutesWorked % 60;
-    const timeTd = tr.querySelector("td:nth-child(6)");
+    const timeTd = tr.querySelector("td:nth-child(7)");
     timeTd.textContent = `${workedHours}h${workedMinutes}m`;
 
     tabelBody.appendChild(tr);
@@ -355,12 +427,17 @@ function getCheckinTime(entry = "") {
   return "-";
 }
 
-function checkLateTime(dateStr, name) {
-  const now = new Date();
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  if (hour > 8 || (hour === 8 && minute > 10)) {
-    alert(`⚠️ ${name} ${dateStr} kuni 08:10 dan kech keldi!`);
+function checkLateTime(dateStr, name, shiftType, expectedShift, hours, minutes) {
+  if (shiftType !== "shift") {
+    if (hours > 8 || (hours === 8 && minutes > 10)) {
+      alert(`⚠️ ${name} ${dateStr} kuni 08:10 dan kech keldi!`);
+    }
+  } else {
+    if (expectedShift === "day" && (hours > 8 || (hours === 8 && minutes > 10))) {
+      alert(`⚠️ ${name} ${dateStr} kuni day shift uchun 08:10 dan kech keldi!`);
+    } else if (expectedShift === "night" && (hours > 20 || (hours === 20 && minutes > 10))) {
+      alert(`⚠️ ${name} ${dateStr} kuni night shift uchun 20:10 dan kech keldi!`);
+    }
   }
 }
 
@@ -372,6 +449,7 @@ form.addEventListener("submit", async (e) => {
   const password = form.password.value.trim();
   const position = form.position.value.trim();
   const startDate = form.startDate.value;
+  const shiftType = form.shiftType.value.trim();
 
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -384,18 +462,20 @@ form.addEventListener("submit", async (e) => {
       email,
       position,
       startDate,
-      role: "employee"
+      shiftType: shiftType || null,
+      role: "employee",
+      vacationLeft: 0
     });
 
     statusMsg.textContent = "✅ Hodim muvaffaqiyatli qo‘shildi!";
     form.reset();
-    loadEmployees();
+    globalEmployees = await loadEmployees();
+    drawTabel(monthSelect.value, globalEmployees);
   } catch (error) {
     statusMsg.textContent = "❌ Xatolik: " + error.message;
   }
 });
 
-/** Load employee list and call drawTabel **/
 async function loadEmployees() {
   const employeeTableBody = document.getElementById("employeeTableBody");
   employeeTableBody.innerHTML = "";
@@ -412,40 +492,60 @@ async function loadEmployees() {
       email,
       position,
       startDate,
+      shiftType,
       vacationLeft
     } = data;
 
-    // Push to array for drawTabel
     employees.push({
-      uid: userDoc.id, // UID from doc ID
+      uid: userDoc.id,
       firstName,
       lastName,
       email,
       position,
       startDate,
+      shiftType,
       vacationLeft
     });
 
-    // Display in employee table
+    const shiftOptions = `
+      <select class="shift-select border px-2 py-1" data-uid="${userDoc.id}">
+        <option value="" ${!shiftType ? "selected" : ""}>Oddiy</option>
+        <option value="shift" ${shiftType === "shift" ? "selected" : ""}>Shiftli</option>
+      </select>
+    `;
+
     const workDuration = calculateWorkDuration(startDate);
 
     const row = `
-  <tr>
-    <td class="border px-4 py-2">${index++}</td>
-    <td class="border px-4 py-2">${firstName}</td>
-    <td class="border px-4 py-2">${lastName}</td>
-    <td class="border px-4 py-2">${email}</td>
-    <td class="border px-4 py-2">${position}</td>
-    <td class="border px-4 py-2">${startDate}</td>
-    <td class="border px-4 py-2">${workDuration}</td>
-    <td class="border px-4 py-2 text-green-600 font-semibold">${vacationLeft} days</td>
-  </tr>
-`;
+      <tr>
+        <td class="border px-4 py-2">${index++}</td>
+        <td class="border px-4 py-2">${firstName}</td>
+        <td class="border px-4 py-2">${lastName}</td>
+        <td class="border px-4 py-2">${email}</td>
+        <td class="border px-4 py-2">${position}</td>
+        <td class="border px-4 py-2">${startDate}</td>
+        <td class="border px-4 py-2">${workDuration}</td>
+        <td class="border px-4 py-2">${shiftOptions}</td>
+        <td class="border px-4 py-2 text-green-600 font-semibold">${vacationLeft} days</td>
+      </tr>
+    `;
 
     employeeTableBody.insertAdjacentHTML("beforeend", row);
   }
 
-  return employees; // ✅ employees ro'yxatini qaytaramiz
+  document.querySelectorAll(".shift-select").forEach(select => {
+    select.addEventListener("change", async (e) => {
+      const uid = e.target.dataset.uid;
+      const newShiftType = e.target.value;
+      await updateDoc(doc(db, "users", uid), {
+        shiftType: newShiftType || null
+      });
+      globalEmployees = await loadEmployees();
+      drawTabel(monthSelect.value, globalEmployees);
+    });
+  });
+
+  return employees;
 }
 
 function calculateWorkDuration(startDateStr) {
@@ -472,50 +572,10 @@ function calculateWorkDuration(startDateStr) {
   }
 }
 
-/** Add new employee **/
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const firstName = form.firstName.value.trim();
-  const lastName = form.lastName.value.trim();
-  const email = form.email.value.trim();
-  const password = form.password.value.trim();
-  const position = form.position.value.trim();
-  const startDate = form.startDate.value;
-
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    console.log(user);
-
-    await setDoc(doc(db, "users", user.uid), {
-      uid: user.uid,
-      firstName,
-      lastName,
-      email: user.email,
-      position,
-      startDate,
-      role: "employee",
-      vacationLeft: 21
-    });
-
-    statusMsg.textContent = "✅ Hodim muvaffaqiyatli qo‘shildi!";
-    form.reset();
-    loadEmployees();
-  } catch (error) {
-    statusMsg.textContent = "❌ Xatolik: " + error.message;
-  }
-});
-
-// Barcha xodimlarga absent qo‘yish (admin uchun)
 export async function bulkAutoMarkAbsent() {
   const now = new Date();
   const hour = now.getHours();
   const minute = now.getMinutes();
-
-  if (hour < 8 || (hour === 8 && minute <= 10)) {
-    console.log("⏳ 08:10 dan oldin, hali absent belgilanmaydi.");
-    return;
-  }
 
   const today = getTodayString();
   const monthStr = today.slice(0, 7);
@@ -528,10 +588,35 @@ export async function bulkAutoMarkAbsent() {
 
   for (const userDoc of usersSnapshot.docs) {
     const uid = userDoc.id;
+    const userData = userDoc.data();
     const userDays = attendanceData[uid] || {};
 
-    // ✅ Allaqachon check-in qilingan yoki absent belgilanganmi?
-    if (userDays[today]) continue;
+    let isRestDay = false;
+    let expectedShift = null;
+    if (userData.shiftType === "shift") {
+      const startDate = new Date(userData.startDate);
+      const todayDate = new Date(today);
+      const daysSinceHire = Math.floor((todayDate - startDate) / (1000 * 60 * 60 * 24));
+      const cyclePosition = daysSinceHire % 4;
+      isRestDay = cyclePosition >= 2;
+      if (!isRestDay) {
+        expectedShift = cyclePosition === 0 ? "day" : "night";
+      }
+    }
+
+    if (userDays[today] || isRestDay) continue;
+
+    let lateHour, lateMinute = 10;
+    if (userData.shiftType === "shift") {
+      lateHour = expectedShift === "day" ? 8 : 20;
+    } else {
+      lateHour = 8;
+    }
+
+    if (hour < lateHour || (hour === lateHour && minute <= lateMinute)) {
+      console.log(`⏳ ${uid} uchun hali absent belgilanmaydi.`);
+      continue;
+    }
 
     userDays[today] = "-";
     attendanceData[uid] = userDays;
@@ -548,9 +633,9 @@ export async function bulkAutoMarkAbsent() {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  const todayMonth = new Date().toISOString().slice(0, 7); // "2025-07"
+  const todayMonth = new Date().toISOString().slice(0, 7);
   bulkAutoMarkAbsent();
-  loadAttendanceData(todayMonth); // ✅ bu yerda aniq qiymat
+  loadAttendanceData(todayMonth);
 });
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -575,14 +660,13 @@ document.addEventListener("DOMContentLoaded", () => {
   navVacations.addEventListener("click", () => showSection(vacationRequestsSection));
 });
 
-// Modal elementlar
 const vacationModal = document.getElementById("vacationModal");
 const vacationModalContent = document.getElementById("vacationModalContent");
 const vacationRequestsTableBody = document.getElementById("vacationRequestsTableBody");
 
 async function loadVacationRequests() {
   const querySnapshot = await getDocs(collection(db, "vacationRequests"));
-  vacationRequestsTableBody.innerHTML = ""; // tozalash
+  vacationRequestsTableBody.innerHTML = "";
 
   querySnapshot.forEach((docSnap) => {
     const data = docSnap.data();
@@ -600,7 +684,6 @@ async function loadVacationRequests() {
     vacationRequestsTableBody.appendChild(tr);
   });
 
-  // Har bir view tugmasiga listener ulash
   document.querySelectorAll('.view-request').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const id = e.target.dataset.id;
@@ -617,44 +700,32 @@ async function loadVacationRequests() {
         <p><strong>From:</strong> ${data.startDate}</p>
         <p><strong>To:</strong> ${data.endDate}</p>
         <p><strong>Status:</strong> ${data.status || "Pending"}</p>
-          <div class="flex justify-end space-x-2 mt-4">
-    <button class="bg-green-500 text-white px-4 py-2 rounded" onclick='handleVacationAction("${id}", "Approved", ${JSON.stringify(data)})'>Approve</button>
-    <button class="bg-red-500 text-white px-4 py-2 rounded" onclick='handleVacationAction("${id}", "Rejected", ${JSON.stringify(data)})'>Reject</button>
-    <button class="text-gray-600" onclick="vacationModal.classList.add('hidden')">Close</button>
-  </div>
+        <div class="flex justify-end space-x-2 mt-4">
+          <button class="bg-green-500 text-white px-4 py-2 rounded" onclick='handleVacationAction("${id}", "Approved", ${JSON.stringify(data)})'>Approve</button>
+          <button class="bg-red-500 text-white px-4 py-2 rounded" onclick='handleVacationAction("${id}", "Rejected", ${JSON.stringify(data)})'>Reject</button>
+          <button class="text-gray-600" onclick="vacationModal.classList.add('hidden')">Close</button>
+        </div>
       `;
       vacationModal.classList.remove("hidden");
     });
   });
 }
 
-async function handleVacationAction(vacationId, action) {
+async function handleVacationAction(vacationId, action, vacationData) {
   const vacationRef = doc(db, "vacationRequests", vacationId);
 
   try {
-    // 1. Vacation status yangilash
     await updateDoc(vacationRef, { status: action });
-
-    const vacationSnap = await getDoc(vacationRef);
-    const vacationData = vacationSnap.data();
-
-    console.log("Vacation ID:", vacationId);
-    console.log("Vacation Data:", vacationData);
-
     const uid = vacationData.uid;
 
     if (action === "Approved") {
       const start = new Date(vacationData.startDate);
       const end = new Date(vacationData.endDate);
-
-      // Sanalar orasidagi kunlar soni (to'liq kiritilgan kunlar ham qo‘shiladi)
       const timeDiff = end.getTime() - start.getTime();
       const dayCount = Math.floor(timeDiff / (1000 * 3600 * 24)) + 1;
 
-      // Faqat users dan olish kerak: real-time yangilanishi uchun
       const userRef = doc(db, "users", uid);
       const userSnap = await getDoc(userRef);
-
       if (!userSnap.exists()) {
         console.error("User not found for UID:", uid);
         return;
@@ -662,33 +733,21 @@ async function handleVacationAction(vacationId, action) {
 
       const userData = userSnap.data();
       const currentVacationLeft = userData.vacationLeft ?? 0;
-
-      // ❗ YANGILIK: 21 - 5 = 16 emas, 21 - 21 = 0 bo‘lyapti — sababi noto‘g‘ri manbadan olingan
       const updatedLeft = Math.max(0, currentVacationLeft - dayCount);
 
-      await updateDoc(userRef, {
-        vacationLeft: updatedLeft
-      });
-
+      await updateDoc(userRef, { vacationLeft: updatedLeft });
       console.log(`✅ VacationLeft updated for ${vacationData.fullName}: ${updatedLeft}`);
     }
 
     loadEmployees();
     loadVacationRequests();
-
-    // Modalni yopish
-    const modal = document.getElementById("vacationModal");
-    if (modal) {
-      modal.classList.add("hidden");
-    }
-
+    vacationModal.classList.add("hidden");
   } catch (error) {
     console.error("❌ Error handling vacation action:", error);
   }
 }
 window.handleVacationAction = handleVacationAction;
 
-// Panelni nav orqali boshqarish (vacation panel ko‘rsatish)
 document.getElementById("navVacations").addEventListener("click", () => {
   document.getElementById("employeesSection").classList.add("hidden");
   document.getElementById("attendanceSection").classList.add("hidden");
@@ -699,19 +758,17 @@ document.getElementById("navVacations").addEventListener("click", () => {
 
 async function loadDayOffs() {
   const dayOffBody = document.getElementById("dayOffTableBody");
-  dayOffBody.innerHTML = ""; // Clear old rows
+  dayOffBody.innerHTML = "";
 
-  const q = query(collection(db, "absenceReasons")); // absence collection
+  const q = query(collection(db, "absenceReasons"));
   const querySnapshot = await getDocs(q);
 
   for (const docSnap of querySnapshot.docs) {
     const data = docSnap.data();
-
     const userSnap = await getDoc(doc(db, "users", data.uid));
     const userData = userSnap.exists() ? userSnap.data() : {};
 
     const tr = document.createElement("tr");
-
     tr.innerHTML = `
       <td class="p-2 border">${userData.firstName || ""} ${userData.lastName || ""}</td>
       <td class="p-2 border">${data.date || "-"}</td>
@@ -719,7 +776,6 @@ async function loadDayOffs() {
       <td class="p-2 border">${data.untilDate || "-"}</td>
       <td class="p-2 border">${data.isMedical ? "✅" : "❌"}</td>
     `;
-
     dayOffBody.appendChild(tr);
   }
 }
@@ -746,7 +802,6 @@ async function loadApprovedVacations() {
     if (!vacationsByUser[uid]) {
       vacationsByUser[uid] = [];
     }
-
     vacationsByUser[uid].push({ from, to });
   });
 

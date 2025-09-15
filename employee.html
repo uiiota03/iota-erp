@@ -8,12 +8,31 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
   <script type="module" src="./js/employee.js" defer></script>
   <script type="module" src="./js/vacation.js" defer></script>
+  <style>
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .spinner {
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+  </style>
 </head>
 
 <body class="bg-gray-100 min-h-screen">
+  <!-- Loader -->
+  <div id="loader" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="spinner"></div>
+  </div>
+
   <div class="flex">
     <!-- Sidebar -->
-    <div class="w-64 bg-white shadow-lg h-screen hidden md:block">
+    <div id="sidebar" class="w-64 bg-white shadow-lg h-screen hidden md:block">
       <div class="p-6 border-b">
         <h2 class="text-lg font-bold">Menu</h2>
       </div>
@@ -35,13 +54,14 @@
           <p><strong>Name:</strong> <span id="employeeName"></span></p>
           <p><strong>Position:</strong> <span id="employeeRole"></span></p>
           <p><strong>Start Date:</strong> <span id="employeeStartDate"></span></p>
+          <p><strong>Shift Type:</strong> <span id="employeeShiftType"></span></p>
         </div>
 
         <!-- Attendance Section -->
         <div id="attendanceSection">
           <div class="mb-4 flex flex-wrap items-center justify-between">
-            <button id="checkInBtn" class="px-4 py-2 border rounded mb-4">Check in</button>
-            <button id="absenceBtn" class="bg-pink-300 text-black border px-4 py-2 rounded">Day off ?</button>
+            <button id="checkInBtn" class="px-4 py-2 border rounded mb-4 bg-blue-500 text-white">Check In</button>
+            <button id="absenceBtn" class="bg-orange-500 text-white border px-4 py-2 rounded mb-4">Day off</button>
             <div class="flex items-center gap-2">
               <label for="monthSelect">Month:</label>
               <select id="monthSelect" class="border px-2 py-1 rounded"></select>
@@ -52,11 +72,9 @@
           <div id="calendar" class="grid grid-cols-7 gap-2 bg-gray-50 p-2 rounded"></div>
         </div>
 
-        <!-- Vacation Section (Initially hidden) -->
-        <!-- Vacation Section (Optimized UI) -->
+        <!-- Vacation Section -->
         <div id="vacationSection" class="hidden">
           <h2 class="text-xl font-bold mb-4">Vacation Application</h2>
-
           <form id="vacationForm" class="bg-gray-50 p-4 rounded shadow space-y-4">
             <p class="text-gray-700">
               I, <input type="text" id="fullName" class="border-b border-gray-400 w-48 px-1" required />, working as a
@@ -68,12 +86,10 @@
               to
               <input type="date" id="endDate" class="border-b border-gray-400 px-1" required />.
             </p>
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Submit
-              Request</button>
+            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Submit Request</button>
             <p id="vacationMessage" class="text-sm text-green-600 mt-2"></p>
           </form>
 
-          <!-- Submitted Requests Table -->
           <h3 class="text-lg font-semibold mt-8 mb-2">Submitted Requests</h3>
           <table class="w-full text-left text-sm table-auto bg-white shadow rounded overflow-hidden">
             <thead class="bg-gray-100">
@@ -85,32 +101,14 @@
                 <th class="p-2 border">Actions</th>
               </tr>
             </thead>
-            <tbody id="vacationTableBody">
-              <!-- Rows will be inserted by JS -->
-            </tbody>
+            <tbody id="vacationTableBody"></tbody>
           </table>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Modal for Viewing Application -->
-  <div id="viewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
-    <div class="bg-white w-full max-w-xl p-6 rounded shadow-lg relative">
-      <button onclick="closeModal()"
-        class="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-xl">&times;</button>
-      <h2 class="text-lg font-semibold mb-4">Vacation Request Details</h2>
-      <p id="modalContent" class="text-gray-700 whitespace-pre-line"></p>
-    </div>
-  </div>
-
-  <!-- Mobile Toggle Navbar (Optional) -->
-  <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white shadow flex justify-around py-2">
-    <button id="navAttendanceMobile" class="text-blue-600">Attendance</button>
-    <button id="navVacationMobile" class="text-gray-600">Vacation</button>
-  </div>
-
-  <!-- HTML faylingizga quyidagilarni joylang -->
+  <!-- Absence Modal -->
   <div id="absenceModal" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 hidden z-50">
     <div class="bg-white p-6 rounded shadow-md w-96">
       <h2 class="text-lg font-semibold mb-4">Ishga chiqaolmaslik haqida</h2>
@@ -133,8 +131,23 @@
     </div>
   </div>
 
+  <!-- View Modal -->
+  <div id="viewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+    <div class="bg-white w-full max-w-xl p-6 rounded shadow-lg relative">
+      <button onclick="document.getElementById('viewModal').classList.add('hidden')"
+        class="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-xl">&times;</button>
+      <h2 class="text-lg font-semibold mb-4">Vacation Request Details</h2>
+      <p id="modalContent" class="text-gray-700 whitespace-pre-line"></p>
+    </div>
+  </div>
+
+  <!-- Mobile Toggle Navbar -->
+  <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white shadow flex justify-around py-2">
+    <button id="navAttendanceMobile" class="text-blue-600">Attendance</button>
+    <button id="navVacationMobile" class="text-gray-600">Vacation</button>
+  </div>
+
   <script>
-    // Sidebar tugmalar
     document.getElementById("navAttendance")?.addEventListener("click", () => {
       document.getElementById("attendanceSection").classList.remove("hidden");
       document.getElementById("vacationSection").classList.add("hidden");
@@ -145,7 +158,6 @@
       document.getElementById("vacationSection").classList.remove("hidden");
     });
 
-    // Mobile toggle tugmalar
     document.getElementById("navAttendanceMobile")?.addEventListener("click", () => {
       document.getElementById("attendanceSection").classList.remove("hidden");
       document.getElementById("vacationSection").classList.add("hidden");
@@ -155,15 +167,7 @@
       document.getElementById("attendanceSection").classList.add("hidden");
       document.getElementById("vacationSection").classList.remove("hidden");
     });
-
-    // Optional: Sidebar toggle funksiyasi agar kerak bo‘lsa
-    function toggleSidebar() {
-      const sidebar = document.getElementById("sidebar");
-      sidebar.classList.toggle("w-64");
-      sidebar.classList.toggle("w-0");
-    }
   </script>
-
 </body>
 
 </html>
