@@ -171,50 +171,15 @@ async function checkIn(uid, userData) {
             }
         }
 
-        if (isRestDay) {
-            alert("⚠️ Bugun siz uchun dam olish kuni.");
-            loader.classList.add("hidden");
-            return;
-        }
-
-        // Validate check-in time based on shift type
-        if (isShiftEmployee) {
-            const currentShift = (hour >= 8 && hour < 20) ? "day" : "night";
-            if (currentShift !== expectedShift) {
-                alert(`⚠️ Siz faqat ${expectedShift === "day" ? "08:00-20:00" : "20:00-08:00"} oralig‘ida check-in qilishingiz mumkin.`);
-                loader.classList.add("hidden");
-                return;
-            }
-            // Check for late check-in (10-minute grace period)
+        // Check for late check-in (10-minute grace period)
+        if (isShiftEmployee && !isRestDay) {
             if (expectedShift === "day" && (hour > 8 || (hour === 8 && minute > 10))) {
                 alert("⚠️ Siz kunduzgi smenada kechikdingiz, ammo check-in qabul qilindi.");
             } else if (expectedShift === "night" && (hour > 20 || (hour === 20 && minute > 10))) {
                 alert("⚠️ Siz tungi smenada kechikdingiz, ammo check-in qabul qilindi.");
             }
-        } else {
-            // Regular employee: 08:00–17:00
-            if (hour < 8 || hour >= 17) {
-                alert("⚠️ Oddiy smena: Faqat 08:00-17:00 oralig‘ida check-in mumkin. Kech bo‘ldi, siz kelmagan deb belgilandingiz.");
-                const docRef = doc(db, "attendance", monthStr);
-                const snap = await getDoc(docRef);
-                let data = snap.exists() ? snap.data() : {};
-                if (!data[uid]) data[uid] = {};
-                data[uid][today] = "-";
-                await setDoc(docRef, data);
-
-                checkInBtn.disabled = true;
-                checkInBtn.textContent = "Check-in yopilgan";
-                checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
-
-                await loadAttendance(uid, monthStr);
-                await updateCheckInState(uid);
-                loader.classList.add("hidden");
-                return;
-            }
-            // Check for late check-in for regular employees
-            if (hour > 8 || (hour === 8 && minute > 10)) {
-                alert("⚠️ Siz kechikdingiz, ammo check-in qabul qilindi.");
-            }
+        } else if (!isShiftEmployee && (hour > 8 || (hour === 8 && minute > 10))) {
+            alert("⚠️ Siz kechikdingiz, ammo check-in qabul qilindi.");
         }
 
         return new Promise((resolve, reject) => {
@@ -238,12 +203,22 @@ async function checkIn(uid, userData) {
                 const snap = await getDoc(docRef);
                 let data = snap.exists() ? snap.data() : {};
                 if (!data[uid]) data[uid] = {};
-                data[uid][today] = `+@${timeStr}`;
+
+                // Shiftli hodimlar uchun vaqtga qarab D yoki N saqlanadi
+                if (isShiftEmployee && !isRestDay) {
+                    const currentShift = (hour >= 8 && hour < 20) ? "D" : "N";
+                    data[uid][today] = currentShift;
+                } else {
+                    data[uid][today] = `+@${timeStr}`;
+                }
+
                 await setDoc(docRef, data);
 
                 checkInBtn.disabled = true;
-                checkInBtn.textContent = "Checked";
+                checkInBtn.textContent = isShiftEmployee && !isRestDay ? (hour >= 8 && hour < 20 ? "Kunduzgi smena" : "Tungi smena") : `Checked In - ${timeStr}`;
                 checkInBtn.classList.add("opacity-50", "cursor-not-allowed");
+                checkInBtn.classList.remove("bg-blue-500");
+                checkInBtn.classList.add(isShiftEmployee && !isRestDay ? (hour >= 8 && hour < 20 ? "bg-green-100" : "bg-blue-200") : "bg-green-500");
 
                 await loadAttendance(uid, monthStr);
                 await updateCheckInState(uid);
@@ -343,9 +318,6 @@ async function loadAttendance(uid, monthStr) {
             const absenceDocRef = doc(db, "absenceReasons", `${uid}_${date}`);
             const absenceSnap = await getDoc(absenceDocRef);
             tooltip = absenceSnap.exists() ? `❌ Kelmagan: ${absenceSnap.data().reason}` : "❌ Kelmagan";
-        } else if (isRestDay && isShiftEmployee) {
-            bgColor = "bg-red-100 text-red-600";
-            tooltip = "🛌 Dam olish kuni";
         } else if (isWeekend) {
             bgColor = "bg-yellow-200";
             tooltip = "🟡 Dam olish kuni";
@@ -418,8 +390,8 @@ async function markApprovedVacationsOnCalendar() {
                 }
             }
         });
-    } catch (err) {
-        console.error("❌ Vacation data error:", err);
+    } catch (error) {
+        console.error("❌ Vacation data error:", error);
     }
     loader.classList.add("hidden");
 }
@@ -459,7 +431,25 @@ async function updateCheckInState(uid) {
             }
         }
 
-        if (status && status.startsWith("+@")) {
+        if (status === "D" && isShiftEmployee) {
+            checkInBtn.textContent = "Kunduzgi smena";
+            checkInBtn.disabled = true;
+            checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-green-100");
+            checkInBtn.classList.remove("bg-blue-500");
+
+            absenceBtn.disabled = true;
+            absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+            absenceBtn.textContent = "Qayd etildi";
+        } else if (status === "N" && isShiftEmployee) {
+            checkInBtn.textContent = "Tungi smena";
+            checkInBtn.disabled = true;
+            checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-blue-200");
+            checkInBtn.classList.remove("bg-blue-500");
+
+            absenceBtn.disabled = true;
+            absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
+            absenceBtn.textContent = "Qayd etildi";
+        } else if (status?.startsWith("+@")) {
             const timeStr = status.split("@")[1];
             const [h, m] = timeStr.split(":").map(Number);
             const isLate = isShiftEmployee
@@ -476,24 +466,6 @@ async function updateCheckInState(uid) {
 
             absenceBtn.disabled = true;
             absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
-        } else if (status === "D" && isShiftEmployee) {
-            checkInBtn.textContent = "Kunduzgi smena (Admin qo‘ydi)";
-            checkInBtn.disabled = true;
-            checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-green-100");
-            checkInBtn.classList.remove("bg-blue-500");
-
-            absenceBtn.disabled = true;
-            absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
-            absenceBtn.textContent = "Qayd etildi";
-        } else if (status === "N" && isShiftEmployee) {
-            checkInBtn.textContent = "Tungi smena (Admin qo‘ydi)";
-            checkInBtn.disabled = true;
-            checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-blue-200");
-            checkInBtn.classList.remove("bg-blue-500");
-
-            absenceBtn.disabled = true;
-            absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
-            absenceBtn.textContent = "Qayd etildi";
         } else if (status === "-") {
             checkInBtn.textContent = "Check-in yopilgan (kelmagan)";
             checkInBtn.disabled = true;
@@ -504,50 +476,13 @@ async function updateCheckInState(uid) {
             absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
             absenceBtn.textContent = "Qayd etildi";
         } else {
-            if (isRestDay) {
-                checkInBtn.textContent = "Bugun dam olish kuni";
-                checkInBtn.disabled = true;
-                checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-100");
-                checkInBtn.classList.remove("bg-blue-500");
+            checkInBtn.textContent = isShiftEmployee && !isRestDay ? (hour >= 8 && hour < 20 ? "Check In (Kunduzgi)" : "Check In (Tungi)") : "Check In";
+            checkInBtn.disabled = false;
+            checkInBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-red-400", "bg-yellow-400", "bg-green-500", "bg-green-100", "bg-blue-200");
+            checkInBtn.classList.add("bg-blue-500");
 
-                absenceBtn.disabled = true;
-                absenceBtn.classList.add("opacity-50", "cursor-not-allowed");
-            } else if (isShiftEmployee) {
-                if ((expectedShift === "day" && (hour < 8 || hour >= 20)) ||
-                    (expectedShift === "night" && (hour >= 8 && hour < 20))) {
-                    checkInBtn.textContent = `Check-in yopilgan (${expectedShift === "day" ? "08:00-20:00" : "20:00-08:00"})`;
-                    checkInBtn.disabled = true;
-                    checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
-                    checkInBtn.classList.remove("bg-blue-500");
-
-                    absenceBtn.disabled = false;
-                    absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
-                } else {
-                    checkInBtn.textContent = `Check In (${expectedShift === "day" ? "Kunduzgi" : "Tungi"})`;
-                    checkInBtn.disabled = false;
-                    checkInBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-red-400", "bg-yellow-400", "bg-green-500");
-                    checkInBtn.classList.add("bg-blue-500");
-
-                    absenceBtn.disabled = false;
-                    absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
-                }
-            } else if (hour >= 17) {
-                checkInBtn.textContent = "Check-in yopilgan (kech bo‘ldi)";
-                checkInBtn.disabled = true;
-                checkInBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-red-400");
-                checkInBtn.classList.remove("bg-blue-500");
-
-                absenceBtn.disabled = false;
-                absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
-            } else {
-                checkInBtn.textContent = "Check In";
-                checkInBtn.disabled = false;
-                checkInBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-red-400", "bg-yellow-400", "bg-green-500");
-                checkInBtn.classList.add("bg-blue-500");
-
-                absenceBtn.disabled = false;
-                absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
-            }
+            absenceBtn.disabled = false;
+            absenceBtn.classList.remove("opacity-50", "cursor-not-allowed");
         }
         loader.classList.add("hidden");
     } catch (error) {
